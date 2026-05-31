@@ -1,5 +1,6 @@
 package options;
 
+import backend.system.Main;
 import objects.Character;
 
 class GraphicsSettingsSubState extends BaseOptionsMenu
