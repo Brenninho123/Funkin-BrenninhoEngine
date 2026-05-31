@@ -3,7 +3,7 @@ package backend.system;
 import debug.FPSCounter;
 
 import flixel.FlxGame;
-import openfl.Assets;
+import flixel.FlxState;
 import openfl.Lib;
 import openfl.display.Sprite;
 import openfl.display.StageScaleMode;
@@ -32,14 +32,13 @@ import lime.graphics.Image;
 
 class Main extends Sprite
 {
-	static final GAME_WIDTH:Int    = 1280;
-	static final GAME_HEIGHT:Int   = 720;
-	static final FRAMERATE:Int     = 60;
-	static final SKIP_SPLASH:Bool  = true;
+	static final GAME_WIDTH:Int        = 1280;
+	static final GAME_HEIGHT:Int       = 720;
+	static final FRAMERATE:Int         = 60;
+	static final SKIP_SPLASH:Bool      = true;
 	static final START_FULLSCREEN:Bool = false;
 
 	public static var fpsVar:FPSCounter;
-
 	public static final platform:String = #if mobile "Mobile" #else "Desktop" #end;
 
 	public static function main():Void
@@ -114,7 +113,11 @@ class Main extends Sprite
 		Achievements.load();
 		#end
 
-		var initialState = #if COPYSTATE_ALLOWED (!CopyState.checkExistingFiles() ? CopyState : TitleState) #else TitleState #end;
+		#if COPYSTATE_ALLOWED
+		var initialState:Class<FlxState> = !CopyState.checkExistingFiles() ? cast CopyState : cast TitleState;
+		#else
+		var initialState:Class<FlxState> = TitleState;
+		#end
 
 		addChild(new FlxGame(
 			finalWidth,
