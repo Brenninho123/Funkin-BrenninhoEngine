@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <project>
-	<app title="Friday Night Funkin': BrenninhoEngine" file="BrenninhoEngine" packageName="com.funkin.brenninhoengine" package="com.funkin.brenninhoengine" main="Main" version="0.2.8" company="Brenninho" />
+	<app title="Friday Night Funkin': BrenninhoEngine" file="BrenninhoEngine" packageName="com.funkin.brenninhoengine" package="com.funkin.brenninhoengine" main="backend.system.Main" version="0.2.8" company="Brenninho" />
 
 	<set name="APP_ID" value="0x0100f6c013bbc000" />
 
