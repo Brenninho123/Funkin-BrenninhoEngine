@@ -45,7 +45,10 @@ import flixel.input.gamepad.FlxGamepadInputID;
 import haxe.Json;
 
 #if mobile
-import mobile.psychlua.Functions as MobileFunctions;
+import mobile.psychlua.MobileFunctions;
+#if android
+import mobile.psychlua.AndroidFunctions;
+#end
 #end
 
 class FunkinLua
@@ -244,8 +247,11 @@ class FunkinLua
 		DeprecatedFunctions.implement(this);
 
 		#if mobile
-		MobileFunctions.implement(this);
-		#end
+  MobileFunctions.implement(this);
+  #if android
+  AndroidFunctions.implement(this);
+  #end
+  #end
 	}
 
 	private function _registerScriptCallbacks(game:PlayState):Void
