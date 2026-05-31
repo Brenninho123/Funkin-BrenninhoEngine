@@ -220,8 +220,8 @@ class VisualsUISubState extends BaseOptionsMenu
 
 	function onChangeFPSCounter()
 	{
-		if(Main.fpsVar != null)
-			Main.fpsVar.visible = ClientPrefs.data.showFPS;
+		if(backend.system.Main.fpsVar != null)
+			backend.system.Main.fpsVar.visible = ClientPrefs.data.showFPS;
 	}
 
 	#if sys
