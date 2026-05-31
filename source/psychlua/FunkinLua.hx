@@ -44,7 +44,7 @@ import flixel.input.gamepad.FlxGamepadInputID;
 
 import haxe.Json;
 
-#if mobile
+#if (mobile && !macro)
 import mobile.psychlua.MobileFunctions;
 #if android
 import mobile.psychlua.AndroidFunctions;
