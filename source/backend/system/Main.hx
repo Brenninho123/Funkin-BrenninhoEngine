@@ -6,11 +6,13 @@ import online.Online;
 
 import flixel.FlxGame;
 import flixel.FlxState;
+import flixel.FlxCamera;
 import openfl.Lib;
 import openfl.display.Sprite;
 import openfl.display.StageScaleMode;
 import openfl.events.Event;
 import openfl.events.KeyboardEvent;
+import openfl.system.System as OpenFlSystem;
 import lime.system.System as LimeSystem;
 import states.TitleState;
 import mobile.backend.MobileScaleMode;
@@ -40,8 +42,18 @@ class Main extends Sprite
 	static final SKIP_SPLASH:Bool      = true;
 	static final START_FULLSCREEN:Bool = false;
 
+	static final GC_MEMORY_THRESHOLD:Float  = 800 * 1024 * 1024;
+	static final GC_INTERVAL_MS:Float       = 30000;
+	static final FPS_LOW_THRESHOLD:Float    = 0.5;
+	static final FPS_CHECK_INTERVAL:Float   = 5000;
+
 	public static var fpsVar:FPSCounter;
 	public static final platform:String = #if mobile "Mobile" #else "Desktop" #end;
+
+	private var _gcTimer:Float         = 0.0;
+	private var _fpsCheckTimer:Float   = 0.0;
+	private var _lowFpsStrikes:Int     = 0;
+	private var _optimized:Bool        = false;
 
 	public static function main():Void
 	{
@@ -96,9 +108,9 @@ class Main extends Sprite
 		#if (openfl <= "9.2.0")
 		var stageWidth:Int  = Lib.current.stage.stageWidth;
 		var stageHeight:Int = Lib.current.stage.stageHeight;
-		var ratioX:Float = stageWidth  / GAME_WIDTH;
-		var ratioY:Float = stageHeight / GAME_HEIGHT;
-		zoom = Math.min(ratioX, ratioY);
+		var ratioX:Float    = stageWidth  / GAME_WIDTH;
+		var ratioY:Float    = stageHeight / GAME_HEIGHT;
+		zoom                = Math.min(ratioX, ratioY);
 		var finalWidth:Int  = Math.ceil(stageWidth  / zoom);
 		var finalHeight:Int = Math.ceil(stageHeight / zoom);
 		#else
@@ -138,7 +150,7 @@ class Main extends Sprite
 		addChild(fpsVar);
 		fpsVar.visible = ClientPrefs.data.showFPS;
 
-		Lib.current.stage.align = "tl";
+		Lib.current.stage.align     = "tl";
 		Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
 
 		#if linux
@@ -150,7 +162,7 @@ class Main extends Sprite
 		#end
 
 		#if html5
-		FlxG.autoPause = false;
+		FlxG.autoPause  = false;
 		FlxG.mouse.visible = false;
 		#end
 
@@ -168,6 +180,126 @@ class Main extends Sprite
 		#end
 
 		FlxG.signals.gameResized.add(onGameResized);
+		addEventListener(Event.ENTER_FRAME, onEnterFrame);
+
+		_applyPlatformOptimizations();
+	}
+
+	private function onEnterFrame(e:Event):Void
+	{
+		var elapsed:Float = FlxG.elapsed * 1000;
+
+		_gcTimer      += elapsed;
+		_fpsCheckTimer += elapsed;
+
+		if (_gcTimer >= GC_INTERVAL_MS)
+		{
+			_gcTimer = 0.0;
+			_runGarbageCollection();
+		}
+
+		if (_fpsCheckTimer >= FPS_CHECK_INTERVAL)
+		{
+			_fpsCheckTimer = 0.0;
+			_checkFpsHealth();
+		}
+	}
+
+	private function _runGarbageCollection():Void
+	{
+		var mem:Float = OpenFlSystem.totalMemory;
+
+		if (mem >= GC_MEMORY_THRESHOLD)
+		{
+			OpenFlSystem.gc();
+			#if cpp
+			cpp.NativeGc.run(true);
+			#end
+		}
+	}
+
+	private function _checkFpsHealth():Void
+	{
+		if (fpsVar == null)
+			return;
+
+		var threshold:Int = Std.int(FlxG.drawFramerate * FPS_LOW_THRESHOLD);
+
+		if (fpsVar.currentFPS < threshold)
+		{
+			_lowFpsStrikes++;
+
+			if (_lowFpsStrikes >= 3 && !_optimized)
+				_applyDynamicOptimizations();
+		}
+		else
+		{
+			if (_lowFpsStrikes > 0)
+				_lowFpsStrikes--;
+
+			if (_optimized && _lowFpsStrikes == 0)
+				_restoreOptimizations();
+		}
+	}
+
+	private function _applyPlatformOptimizations():Void
+	{
+		#if mobile
+		FlxG.drawFramerate  = 60;
+		FlxG.updateFramerate = 60;
+		FlxG.fixedTimestep  = false;
+		#end
+
+		#if html5
+		FlxG.drawFramerate  = 60;
+		FlxG.updateFramerate = 60;
+		#end
+
+		#if desktop
+		FlxG.fixedTimestep = false;
+		#end
+
+		_setVSync(ClientPrefs.data.vSync ?? false);
+	}
+
+	private function _applyDynamicOptimizations():Void
+	{
+		_optimized = true;
+
+		FlxG.drawFramerate   = Std.int(FRAMERATE * 0.75);
+		FlxG.updateFramerate = FlxG.drawFramerate;
+
+		for (cam in FlxG.cameras.list)
+		{
+			if (cam != null)
+				cam.antialiasing = false;
+		}
+
+		OpenFlSystem.gc();
+		#if cpp
+		cpp.NativeGc.run(true);
+		#end
+	}
+
+	private function _restoreOptimizations():Void
+	{
+		_optimized   = false;
+		_lowFpsStrikes = 0;
+
+		FlxG.drawFramerate   = FRAMERATE;
+		FlxG.updateFramerate = FRAMERATE;
+
+		var antialiasing:Bool = ClientPrefs.data.antialiasing ?? true;
+		for (cam in FlxG.cameras.list)
+			if (cam != null)
+				cam.antialiasing = antialiasing;
+	}
+
+	private function _setVSync(enabled:Bool):Void
+	{
+		#if desktop
+		Lib.current.stage.window.vsync = enabled;
+		#end
 	}
 
 	private function onKeyUp(e:KeyboardEvent):Void
@@ -200,7 +332,7 @@ class Main extends Sprite
 	{
 		@:privateAccess
 		{
-			sprite.__cacheBitmap = null;
+			sprite.__cacheBitmap     = null;
 			sprite.__cacheBitmapData = null;
 		}
 	}
