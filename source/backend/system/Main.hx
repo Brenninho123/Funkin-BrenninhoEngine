@@ -42,18 +42,18 @@ class Main extends Sprite
 	static final SKIP_SPLASH:Bool      = true;
 	static final START_FULLSCREEN:Bool = false;
 
-	static final GC_MEMORY_THRESHOLD:Float  = 800 * 1024 * 1024;
-	static final GC_INTERVAL_MS:Float       = 30000;
-	static final FPS_LOW_THRESHOLD:Float    = 0.5;
-	static final FPS_CHECK_INTERVAL:Float   = 5000;
+	static final GC_MEMORY_THRESHOLD:Float = 800 * 1024 * 1024;
+	static final GC_INTERVAL_MS:Float      = 30000;
+	static final FPS_LOW_THRESHOLD:Float   = 0.5;
+	static final FPS_CHECK_INTERVAL:Float  = 5000;
 
 	public static var fpsVar:FPSCounter;
 	public static final platform:String = #if mobile "Mobile" #else "Desktop" #end;
 
-	private var _gcTimer:Float         = 0.0;
-	private var _fpsCheckTimer:Float   = 0.0;
-	private var _lowFpsStrikes:Int     = 0;
-	private var _optimized:Bool        = false;
+	private var _gcTimer:Float       = 0.0;
+	private var _fpsCheckTimer:Float = 0.0;
+	private var _lowFpsStrikes:Int   = 0;
+	private var _optimized:Bool      = false;
 
 	public static function main():Void
 	{
@@ -162,7 +162,7 @@ class Main extends Sprite
 		#end
 
 		#if html5
-		FlxG.autoPause  = false;
+		FlxG.autoPause     = false;
 		FlxG.mouse.visible = false;
 		#end
 
@@ -179,17 +179,17 @@ class Main extends Sprite
 		FlxG.scaleMode = new MobileScaleMode();
 		#end
 
+		_applyPlatformOptimizations();
+
 		FlxG.signals.gameResized.add(onGameResized);
 		addEventListener(Event.ENTER_FRAME, onEnterFrame);
-
-		_applyPlatformOptimizations();
 	}
 
 	private function onEnterFrame(e:Event):Void
 	{
 		var elapsed:Float = FlxG.elapsed * 1000;
 
-		_gcTimer      += elapsed;
+		_gcTimer       += elapsed;
 		_fpsCheckTimer += elapsed;
 
 		if (_gcTimer >= GC_INTERVAL_MS)
@@ -207,9 +207,7 @@ class Main extends Sprite
 
 	private function _runGarbageCollection():Void
 	{
-		var mem:Float = OpenFlSystem.totalMemory;
-
-		if (mem >= GC_MEMORY_THRESHOLD)
+		if (OpenFlSystem.totalMemory >= GC_MEMORY_THRESHOLD)
 		{
 			OpenFlSystem.gc();
 			#if cpp
@@ -228,7 +226,6 @@ class Main extends Sprite
 		if (fpsVar.currentFPS < threshold)
 		{
 			_lowFpsStrikes++;
-
 			if (_lowFpsStrikes >= 3 && !_optimized)
 				_applyDynamicOptimizations();
 		}
@@ -236,7 +233,6 @@ class Main extends Sprite
 		{
 			if (_lowFpsStrikes > 0)
 				_lowFpsStrikes--;
-
 			if (_optimized && _lowFpsStrikes == 0)
 				_restoreOptimizations();
 		}
@@ -245,21 +241,20 @@ class Main extends Sprite
 	private function _applyPlatformOptimizations():Void
 	{
 		#if mobile
-		FlxG.drawFramerate  = 60;
+		FlxG.drawFramerate   = 60;
 		FlxG.updateFramerate = 60;
-		FlxG.fixedTimestep  = false;
+		FlxG.fixedTimestep   = false;
 		#end
 
 		#if html5
-		FlxG.drawFramerate  = 60;
+		FlxG.drawFramerate   = 60;
 		FlxG.updateFramerate = 60;
 		#end
 
 		#if desktop
 		FlxG.fixedTimestep = false;
+		_setVSync(ClientPrefs.data.vsync);
 		#end
-
-		_setVSync(ClientPrefs.data.vSync ?? false);
 	}
 
 	private function _applyDynamicOptimizations():Void
@@ -269,11 +264,10 @@ class Main extends Sprite
 		FlxG.drawFramerate   = Std.int(FRAMERATE * 0.75);
 		FlxG.updateFramerate = FlxG.drawFramerate;
 
-		for (cam in FlxG.cameras.list)
-		{
-			if (cam != null)
-				cam.antialiasing = false;
-		}
+		if (FlxG.cameras != null)
+			for (cam in FlxG.cameras.list)
+				if (cam != null)
+					cam.antialiasing = false;
 
 		OpenFlSystem.gc();
 		#if cpp
@@ -283,16 +277,17 @@ class Main extends Sprite
 
 	private function _restoreOptimizations():Void
 	{
-		_optimized   = false;
+		_optimized     = false;
 		_lowFpsStrikes = 0;
 
 		FlxG.drawFramerate   = FRAMERATE;
 		FlxG.updateFramerate = FRAMERATE;
 
-		var antialiasing:Bool = ClientPrefs.data.antialiasing ?? true;
-		for (cam in FlxG.cameras.list)
-			if (cam != null)
-				cam.antialiasing = antialiasing;
+		var antialiasing:Bool = ClientPrefs.data.antialiasing;
+		if (FlxG.cameras != null)
+			for (cam in FlxG.cameras.list)
+				if (cam != null)
+					cam.antialiasing = antialiasing;
 	}
 
 	private function _setVSync(enabled:Bool):Void
@@ -318,11 +313,9 @@ class Main extends Sprite
 		}
 
 		if (FlxG.cameras != null)
-		{
 			for (cam in FlxG.cameras.list)
 				if (cam != null && cam.filters != null)
 					resetSpriteCache(cam.flashSprite);
-		}
 
 		if (FlxG.game != null)
 			resetSpriteCache(FlxG.game);
