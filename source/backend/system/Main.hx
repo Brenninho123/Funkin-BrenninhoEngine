@@ -1,6 +1,7 @@
 package backend.system;
 
 import debug.FPSCounter;
+import api.APISystem;
 
 import flixel.FlxGame;
 import flixel.FlxState;
@@ -63,6 +64,7 @@ class Main extends Sprite
 		#end
 
 		backend.CrashHandler.init();
+		APISystem.init();
 
 		#if windows
 		@:functionCode('
