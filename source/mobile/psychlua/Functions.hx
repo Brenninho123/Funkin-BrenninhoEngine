@@ -239,10 +239,10 @@ class AndroidFunctions
 		{
 			hint = switch (hint != null ? hint.toLowerCase() : '')
 			{
-				case 'portrait':                                      'Portrait';
+				case 'portrait':                                                  'Portrait';
 				case 'portraitupsidedown' | 'upsidedownportrait' | 'upsidedown': 'PortraitUpsideDown';
-				case 'landscapeleft'      | 'leftlandscape':          'LandscapeLeft';
-				case 'landscaperight'     | 'rightlandscape' | 'landscape': 'LandscapeRight';
+				case 'landscapeleft'      | 'leftlandscape':                      'LandscapeLeft';
+				case 'landscaperight'     | 'rightlandscape' | 'landscape':       'LandscapeRight';
 				default: null;
 			};
 			if (hint == null) { FunkinLua.luaTrace('setOrientation: No valid orientation specified.'); return; }
@@ -255,7 +255,7 @@ class AndroidFunctions
 		{
 			if (text     == null) { FunkinLua.luaTrace('showToast: No text specified.');     return; }
 			if (duration == null) { FunkinLua.luaTrace('showToast: No duration specified.'); return; }
-			AndroidToast.makeText(text, duration, -1, xOffset ?? 0, yOffset ?? 0);
+			AndroidToast.makeText(text, duration, -1, xOffset != null ? xOffset : 0, yOffset != null ? yOffset : 0);
 		});
 
 		Lua_helper.add_callback(lua, "isScreenKeyboardShown", () -> PsychJNI.isScreenKeyboardShown());
@@ -268,7 +268,7 @@ class AndroidFunctions
 			PsychJNI.clipboardSetText(text);
 		});
 
-		Lua_helper.add_callback(lua, "manualBackButton", () -> PsychJNI.manualBackButton());
+		Lua_helper.add_callback(lua, "manualBackButton",  () -> PsychJNI.manualBackButton());
 
 		Lua_helper.add_callback(lua, "setActivityTitle", function(text:String):Void
 		{
@@ -279,18 +279,4 @@ class AndroidFunctions
 }
 #end
 #end
-
-class MobileLuaBridge
-{
-	public static function implement(funk:psychlua.FunkinLua):Void
-	{
-		#if mobile
-		MobileFunctions.implement(funk);
-		#if android
-		AndroidFunctions.implement(funk);
-		#end
-		#end
-	}
-}
-
 #end
