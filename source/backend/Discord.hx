@@ -78,7 +78,7 @@ class DiscordClient
 		changePresence();
 	}
 
-	public static function changePresence(?details:String = 'Playing BrenninhoEngins\'', ?state:Null<String>, ?smallImageKey:String, ?hasStartTimestamp:Bool, ?endTimestamp:Float = 0):Void
+	public static function changePresence(?details:String = 'Playing BrenninhoEngine\'', ?state:Null<String>, ?smallImageKey:String, ?hasStartTimestamp:Bool, ?endTimestamp:Float = 0):Void
 	{
 		var startTimestamp:Float = hasStartTimestamp ? Date.now().getTime() : 0;
 		if (endTimestamp > 0)
