@@ -20,8 +20,8 @@ on:
         type: string
 
 env:
-  HAXE_VERSION: 4.3.2
-  PROJECT_NAME: PsychEngine
+  HAXE_VERSION: 4.3.7
+  PROJECT_NAME: BrenninhoEngine
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
@@ -51,6 +51,10 @@ jobs:
         run: |
           haxelib install hmm --quiet
           haxelib run hmm install --quiet
+
+      - name: Accept Android SDK Licenses
+        if: inputs.name == 'Android'
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
       - name: Configure Android
         if: inputs.name == 'Android'
