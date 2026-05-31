@@ -44,9 +44,11 @@ import flixel.input.gamepad.FlxGamepadInputID;
 
 import haxe.Json;
 
+#if mobile
+import mobile.psychlua.Functions as MobileFunctions;
 #if android
-import mobile.psychlua.MobileFunctions;
-import mobile.psychlua.AndroidFunctions;
+import mobile.psychlua.Functions as AndroidFunctions;
+#end
 #end
 
 class FunkinLua
