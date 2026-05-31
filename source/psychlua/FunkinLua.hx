@@ -239,7 +239,7 @@ class FunkinLua
 		ShaderFunctions.implement(this);
 		DeprecatedFunctions.implement(this);
 
-		#if mobile
+		#if (mobile && LUA_ALLOWED)
   mobile.psychlua.MobileFunctions.implement(this);
   #if android
   mobile.psychlua.AndroidFunctions.implement(this);
