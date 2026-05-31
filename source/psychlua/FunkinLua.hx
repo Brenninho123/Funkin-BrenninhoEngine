@@ -44,6 +44,10 @@ import flixel.input.gamepad.FlxGamepadInputID;
 
 import haxe.Json;
 
+#if mobile
+import mobile.psychlua.MobileLuaBridge;
+#end
+
 class FunkinLua
 {
 	public var lua:State = null;
@@ -239,11 +243,8 @@ class FunkinLua
 		ShaderFunctions.implement(this);
 		DeprecatedFunctions.implement(this);
 
-		#if (mobile && LUA_ALLOWED)
-  mobile.psychlua.MobileFunctions.implement(this);
-  #if android
-  mobile.psychlua.AndroidFunctions.implement(this);
-  #end
+		#if mobile
+  MobileLuaBridge.implement(this);
   #end
 	}
 
