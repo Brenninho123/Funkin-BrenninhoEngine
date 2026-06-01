@@ -95,6 +95,8 @@ jobs:
         run: |
           if [ "${{ inputs.name }}" = "Linux" ] || [ "${{ inputs.name }}" = "Android" ]; then
             CPUS=$(nproc)
+          elif [ "${{ inputs.name }}" = "Windows" ]; then
+            CPUS=$NUMBER_OF_PROCESSORS
           else
             CPUS=$(sysctl -n hw.logicalcpu)
           fi
