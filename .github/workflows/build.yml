@@ -37,6 +37,40 @@ jobs:
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
 
+      - name: Cache Haxelib
+        uses: actions/cache@v4
+        with:
+          path: ~/.haxelib
+          key: haxelib-${{ inputs.name }}-${{ hashFiles('hmm.json') }}
+          restore-keys: |
+            haxelib-${{ inputs.name }}-
+
+      - name: Cache Haxe Compiler
+        uses: actions/cache@v4
+        with:
+          path: .haxe-cache
+          key: haxe-compiler-${{ inputs.name }}-${{ hashFiles('source/**/*.hx') }}
+          restore-keys: |
+            haxe-compiler-${{ inputs.name }}-
+
+      - name: Cache HXCPP Build
+        uses: actions/cache@v4
+        with:
+          path: |
+            export/release/cpp
+            export/debug/cpp
+            ~/.hxcpp
+          key: hxcpp-${{ inputs.name }}-${{ hashFiles('source/**/*.hx', 'Project.xml') }}
+          restore-keys: |
+            hxcpp-${{ inputs.name }}-
+
+      - name: Cache Android NDK
+        if: inputs.name == 'Android'
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_NDK_LATEST_HOME }}
+          key: android-ndk-${{ inputs.name }}
+
       - name: Install libVLC
         if: inputs.name == 'Linux'
         run: sudo apt-get install -y libvlc-dev libvlccore-dev
@@ -64,8 +98,19 @@ jobs:
           haxelib run lime config JAVA_HOME $JAVA_HOME_17_arm64
           haxelib run lime config ANDROID_SETUP true
 
+      - name: Set Compiler Threads
+        shell: bash
+        run: |
+          if [ "${{ inputs.name }}" = "Linux" ] || [ "${{ inputs.name }}" = "Android" ]; then
+            CPUS=$(nproc)
+          else
+            CPUS=$(sysctl -n hw.logicalcpu)
+          fi
+          echo "CPUS=$CPUS" >> $GITHUB_ENV
+          echo "Using $CPUS threads for compilation"
+
       - name: Compile
-        run: haxelib run lime build ${{ inputs.buildArgs }}
+        run: haxelib run lime build ${{ inputs.buildArgs }} -DHXCPP_COMPILE_THREADS=${{ env.CPUS }} -DHXCPP_OPTIMIZE_FOR_CPUID=1
 
       - name: Make IPA
         if: inputs.name == 'iOS'
