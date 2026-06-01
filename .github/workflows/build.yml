@@ -93,7 +93,7 @@ jobs:
       - name: Set Compiler Threads
         shell: bash
         run: |
-          if [ "${{ inputs.name }}" = "Linux" ] || [ "${{ inputs.name }}" = "Android" ]; then
+          if [ "${{ inputs.name }}" = "Linux" ]; then
             CPUS=$(nproc)
           elif [ "${{ inputs.name }}" = "Windows" ]; then
             CPUS=$NUMBER_OF_PROCESSORS
