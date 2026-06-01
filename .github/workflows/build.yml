@@ -59,17 +59,9 @@ jobs:
           path: |
             export/release/cpp
             export/debug/cpp
-            ~/.hxcpp
           key: hxcpp-${{ inputs.name }}-${{ hashFiles('source/**/*.hx', 'Project.xml') }}
           restore-keys: |
             hxcpp-${{ inputs.name }}-
-
-      - name: Cache Android NDK
-        if: inputs.name == 'Android'
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.ANDROID_NDK_LATEST_HOME }}
-          key: android-ndk-${{ inputs.name }}
 
       - name: Install libVLC
         if: inputs.name == 'Linux'
