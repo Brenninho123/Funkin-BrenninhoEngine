@@ -69,7 +69,7 @@ class APIHelper
 		"logs/"
 	];
 
-	public static var isInitialized:Bool           = false;
+	public static var isInitialized:Bool            = false;
 	public static var onThreatDetected:String->Void = null;
 	public static var onRateLimitHit:String->Void   = null;
 	public static var onBlacklisted:String->Void    = null;
@@ -153,7 +153,14 @@ class APIHelper
 		var warnings:Array<String> = [];
 
 		if (content == null || content.length == 0)
-			return { safe: false, threats: ['Empty or null script'], warnings: [], script: scriptName, checksum: '', scanId: _scanCount };
+			return {
+				safe:     false,
+				threats:  ['Empty or null script'],
+				warnings: [],
+				script:   scriptName,
+				checksum: '',
+				scanId:   _scanCount
+			};
 
 		if (content.length > MAX_SCRIPT_SIZE_KB * 1024)
 		{
@@ -192,7 +199,7 @@ class APIHelper
 		if (_containsInfiniteLoop(content))
 			warnings.push('Possible infinite loop detected');
 
-		var checksum:String    = Sha256.encode(content);
+		var checksum:String         = Sha256.encode(content);
 		var result:ScriptScanResult = {
 			safe:     threats.length == 0,
 			threats:  threats,
@@ -270,10 +277,10 @@ class APIHelper
 			};
 
 		var sanitized:String = input
-			.replace('<script',   '&lt;script')
-			.replace('</script',  '&lt;/script')
+			.replace('<script',    '&lt;script')
+			.replace('</script',   '&lt;/script')
 			.replace('javascript:', '')
-			.replace(NULL_BYTE,   '');
+			.replace(NULL_BYTE,    '');
 
 		for (pattern in DANGEROUS_PATTERNS)
 			if (sanitized.contains(pattern))
@@ -534,7 +541,13 @@ class APIHelper
 
 		var charCodeCount:Int = 0;
 		var ccPattern:EReg    = ~/String\.fromCharCode/g;
-		while (ccPattern.match(content)) { charCodeCount++; ccPattern.matchedPos(); }
+		var temp:String       = content;
+		while (ccPattern.match(temp))
+		{
+			charCodeCount++;
+			var pos = ccPattern.matchedPos();
+			temp = temp.substr(pos.pos + pos.len);
+		}
 		if (charCodeCount > 5) return true;
 
 		return false;
@@ -556,18 +569,17 @@ class APIHelper
 
 	private static function _containsEncodedPayload(content:String):Bool
 	{
-		var b64:EReg   = ~/[A-Za-z0-9+\/]{40,}={0,2}/;
+		var b64:EReg     = ~/[A-Za-z0-9+\/]{40,}={0,2}/;
 		var longHex:EReg = ~/[0-9a-fA-F]{64,}/;
 		return b64.match(content) || longHex.match(content);
 	}
 
 	private static function _containsInfiniteLoop(content:String):Bool
 	{
-		if (content.contains('while(true)') || content.contains('while (true)'))
-			return true;
-		if (content.contains('for(;;)') || content.contains('for (;;)'))
-			return true;
-		return false;
+		return content.contains('while(true)')
+			|| content.contains('while (true)')
+			|| content.contains('for(;;)')
+			|| content.contains('for (;;)');
 	}
 
 	private static function _generateSessionKey():String
@@ -596,8 +608,9 @@ class APIHelper
 		if (!FileSystem.exists(BLACKLIST_FILE)) return;
 		try
 		{
-			var parsed:Dynamic = Json.parse(File.getContent(BLACKLIST_FILE));
-			_blacklist = cast(parsed.blacklist, Array<String>);
+			var parsed:Dynamic     = Json.parse(File.getContent(BLACKLIST_FILE));
+			var raw:Array<Dynamic> = cast parsed.blacklist;
+			_blacklist = raw != null ? raw.map((s:Dynamic) -> Std.string(s)) : [];
 		}
 		catch (e:Dynamic) { _blacklist = []; }
 	}
