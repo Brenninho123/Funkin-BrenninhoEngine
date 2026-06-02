@@ -9,7 +9,6 @@ import online.users.OnlineUsers;
 
 import flixel.FlxGame;
 import flixel.FlxState;
-import flixel.FlxCamera;
 import openfl.Lib;
 import openfl.display.Sprite;
 import openfl.display.StageScaleMode;
@@ -45,11 +44,11 @@ class Main extends Sprite
 	static final SKIP_SPLASH:Bool      = true;
 	static final START_FULLSCREEN:Bool = false;
 
-	static final GC_MEMORY_THRESHOLD:Float  = 800 * 1024 * 1024;
-	static final GC_INTERVAL_MS:Float       = 30000;
-	static final FPS_LOW_THRESHOLD:Float    = 0.5;
-	static final FPS_CHECK_INTERVAL:Float   = 5000;
-	static final SYSTEMS_UPDATE_INTERVAL:Float = 1000;
+	static final GC_MEMORY_THRESHOLD:Float     = 800 * 1024 * 1024;
+	static final GC_INTERVAL_MS:Float          = 30000;
+	static final FPS_LOW_THRESHOLD:Float       = 0.5;
+	static final FPS_CHECK_INTERVAL:Float      = 5000;
+	static final SYSTEMS_UPDATE_INTERVAL:Float = 2000;
 
 	public static var fpsVar:FPSCounter;
 	public static final platform:String = #if mobile "Mobile" #else "Desktop" #end;
@@ -61,6 +60,8 @@ class Main extends Sprite
 	private var _optimized:Bool          = false;
 	private var _paused:Bool             = false;
 	private var _startTime:Float         = 0.0;
+	private var _frameCount:Int          = 0;
+	private var _setupDone:Bool          = false;
 
 	public static function main():Void
 	{
@@ -78,21 +79,14 @@ class Main extends Sprite
 		_startTime = Date.now().getTime();
 
 		#if android
-		StorageUtil.requestPermissions();
+		try { StorageUtil.requestPermissions(); } catch (e:Dynamic) {}
 		#end
 
 		#if mobile
-		Sys.setCwd(StorageUtil.getStorageDirectory());
+		try { Sys.setCwd(StorageUtil.getStorageDirectory()); } catch (e:Dynamic) {}
 		#end
 
-		_initSystems();
-
-		#if windows
-		@:functionCode('
-			setProcessDPIAware();
-			DisableProcessWindowsGhosting();
-		')
-		#end
+		try { backend.CrashHandler.init(); } catch (e:Dynamic) {}
 
 		if (stage != null)
 			init();
@@ -100,44 +94,71 @@ class Main extends Sprite
 			addEventListener(Event.ADDED_TO_STAGE, init);
 	}
 
-	private function _initSystems():Void
-	{
-		backend.CrashHandler.init();
-
-		APISystem.init();
-		APIHelper.init();
-
-		APIHelper.onThreatDetected = function(threat:String):Void
-		{
-			FlxG.log.add('[SECURITY THREAT] $threat');
-		};
-
-		Online.init();
-		Online.onConnectionChanged = function(connected:Bool):Void
-		{
-			FlxG.log.add('[ONLINE] Connection changed: ${connected ? "Online" : "Offline"}');
-			if (connected)
-				OnlineUsers.fetchUsers(null, null);
-		};
-
-		OnlineUsers.init();
-
-		Audio.init();
-		Audio.onVolumeChanged = function(volume:Float):Void
-		{
-			FlxG.log.add('[AUDIO] Master volume: $volume');
-		};
-	}
-
 	private function init(?e:Event):Void
 	{
 		if (hasEventListener(Event.ADDED_TO_STAGE))
 			removeEventListener(Event.ADDED_TO_STAGE, init);
 
-		setupGame();
+		if (_setupDone) return;
+		_setupDone = true;
+
+		_initWindowHints();
+		_setupGame();
 	}
 
-	private function setupGame():Void
+	private function _initWindowHints():Void
+	{
+		#if windows
+		@:functionCode('
+			setProcessDPIAware();
+			DisableProcessWindowsGhosting();
+		')
+		#end
+	}
+
+	private function _initSystems():Void
+	{
+		try
+		{
+			APISystem.init();
+			APIHelper.init();
+
+			APIHelper.onThreatDetected = function(threat:String):Void
+			{
+				FlxG.log.add('[SECURITY] $threat');
+			};
+		}
+		catch (e:Dynamic)
+		{
+			FlxG.log.add('[WARN] API systems failed to init: $e');
+		}
+
+		try
+		{
+			Online.init();
+			Online.onConnectionChanged = function(connected:Bool):Void
+			{
+				if (connected) OnlineUsers.fetchUsers(null, null);
+			};
+			OnlineUsers.init();
+		}
+		catch (e:Dynamic)
+		{
+			FlxG.log.add('[WARN] Online systems failed to init: $e');
+		}
+
+		try
+		{
+			Audio.init();
+			Audio.onVolumeChanged = function(volume:Float):Void {};
+		}
+		catch (e:Dynamic)
+		{
+			FlxG.log.add('[WARN] Audio system failed to init: $e');
+		}
+	}
+
+	private function _setupGame():Void
 	{
 		var zoom:Float = 1.0;
 
@@ -155,14 +176,18 @@ class Main extends Sprite
 		#end
 
 		#if LUA_ALLOWED
-		Lua.set_callbacks_function(cpp.Callable.fromStaticFunction(psychlua.CallbackHandler.call));
+		try
+		{
+			Lua.set_callbacks_function(cpp.Callable.fromStaticFunction(psychlua.CallbackHandler.call));
+		}
+		catch (e:Dynamic) {}
 		#end
 
 		Controls.instance = new Controls();
 		ClientPrefs.loadDefaultKeys();
 
 		#if ACHIEVEMENTS_ALLOWED
-		Achievements.load();
+		try { Achievements.load(); } catch (e:Dynamic) {}
 		#end
 
 		#if COPYSTATE_ALLOWED
@@ -171,7 +196,7 @@ class Main extends Sprite
 		var initialState:Class<FlxState> = TitleState;
 		#end
 
-		addChild(new FlxGame(
+		var game:FlxGame = new FlxGame(
 			finalWidth,
 			finalHeight,
 			initialState,
@@ -180,7 +205,9 @@ class Main extends Sprite
 			FRAMERATE,
 			SKIP_SPLASH,
 			START_FULLSCREEN
-		));
+		);
+
+		addChild(game);
 
 		fpsVar = new FPSCounter(10, 3, 0xFFFFFF);
 		addChild(fpsVar);
@@ -190,11 +217,11 @@ class Main extends Sprite
 		Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
 
 		#if linux
-		Lib.current.stage.window.setIcon(Image.fromFile('icon.png'));
+		try { Lib.current.stage.window.setIcon(Image.fromFile('icon.png')); } catch (e:Dynamic) {}
 		#end
 
 		#if desktop
-		FlxG.stage.addEventListener(KeyboardEvent.KEY_UP, onKeyUp);
+		FlxG.stage.addEventListener(KeyboardEvent.KEY_UP, _onKeyUp);
 		#end
 
 		#if html5
@@ -203,67 +230,81 @@ class Main extends Sprite
 		#end
 
 		#if DISCORD_ALLOWED
-		DiscordClient.prepare();
+		try { DiscordClient.prepare(); } catch (e:Dynamic) {}
 		#end
 
 		#if android
-		FlxG.android.preventDefaultKeys = [BACK];
+		try { FlxG.android.preventDefaultKeys = [BACK]; } catch (e:Dynamic) {}
 		#end
 
 		#if mobile
-		LimeSystem.allowScreenTimeout = ClientPrefs.data.screensaver;
-		FlxG.scaleMode = new MobileScaleMode();
+		try
+		{
+			LimeSystem.allowScreenTimeout = ClientPrefs.data.screensaver;
+			FlxG.scaleMode = new MobileScaleMode();
+		}
+		catch (e:Dynamic) {}
 		#end
 
 		_applyPlatformOptimizations();
 		_setupWindowEvents();
 
-		FlxG.signals.gameResized.add(onGameResized);
-		addEventListener(Event.ENTER_FRAME, onEnterFrame);
+		FlxG.signals.gameResized.add(_onGameResized);
+		addEventListener(Event.ENTER_FRAME, _onEnterFrame);
+
+		_initSystems();
 	}
 
 	private function _setupWindowEvents():Void
 	{
 		#if desktop
-		Lib.current.stage.window.onFocusIn.add(function():Void
+		try
 		{
-			_paused = false;
-			Audio.resumeAll();
-			FlxG.log.add('[WINDOW] Focus gained');
-		});
+			Lib.current.stage.window.onFocusIn.add(function():Void
+			{
+				_paused = false;
+				try { Audio.resumeAll(); } catch (e:Dynamic) {}
+			});
 
-		Lib.current.stage.window.onFocusOut.add(function():Void
-		{
-			_paused = true;
-			if (ClientPrefs.data.autoPause)
-				Audio.pauseAll();
-			FlxG.log.add('[WINDOW] Focus lost');
-		});
+			Lib.current.stage.window.onFocusOut.add(function():Void
+			{
+				_paused = true;
+				if (ClientPrefs.data.autoPause)
+					try { Audio.pauseAll(); } catch (e:Dynamic) {}
+			});
 
-		Lib.current.stage.window.onClose.add(function():Void
-		{
-			_onShutdown();
-		});
+			Lib.current.stage.window.onClose.add(function():Void
+			{
+				_onShutdown();
+			});
+		}
+		catch (e:Dynamic) {}
 		#end
 	}
 
 	private function _onShutdown():Void
 	{
-		APIHelper.flushAuditLog();
-		Online.clearPendingUploads();
-		Audio.stopAll();
+		try { APIHelper.flushAuditLog(); }   catch (e:Dynamic) {}
+		try { Online.clearPendingUploads(); } catch (e:Dynamic) {}
+		try { Audio.stopAll(); }              catch (e:Dynamic) {}
 
 		#if DISCORD_ALLOWED
-		if (DiscordClient.isInitialized)
-			DiscordClient.shutdown();
+		try
+		{
+			if (DiscordClient.isInitialized)
+				DiscordClient.shutdown();
+		}
+		catch (e:Dynamic) {}
 		#end
 	}
 
-	private function onEnterFrame(e:Event):Void
+	private function _onEnterFrame(e:Event):Void
 	{
+		_frameCount++;
+
 		if (_paused) return;
 
-		var elapsed:Float = FlxG.elapsed;
+		var elapsed:Float   = FlxG.elapsed;
 		var elapsedMs:Float = elapsed * 1000;
 
 		_gcTimer       += elapsedMs;
@@ -285,24 +326,26 @@ class Main extends Sprite
 		if (_systemsTimer >= SYSTEMS_UPDATE_INTERVAL)
 		{
 			_systemsTimer = 0.0;
-			Online.update(elapsed);
-			OnlineUsers.update(elapsed);
+			try { Online.update(elapsed); }      catch (e:Dynamic) {}
+			try { OnlineUsers.update(elapsed); } catch (e:Dynamic) {}
 		}
 
-		Audio.update(elapsed);
+		try { Audio.update(elapsed); } catch (e:Dynamic) {}
 	}
 
 	private function _runGarbageCollection():Void
 	{
-		var mem:Float = OpenFlSystem.totalMemory;
-
-		if (mem >= GC_MEMORY_THRESHOLD)
+		try
 		{
-			OpenFlSystem.gc();
-			#if cpp
-			cpp.NativeGc.run(true);
-			#end
+			if (OpenFlSystem.totalMemory >= GC_MEMORY_THRESHOLD)
+			{
+				OpenFlSystem.gc();
+				#if cpp
+				cpp.NativeGc.run(true);
+				#end
+			}
 		}
+		catch (e:Dynamic) {}
 	}
 
 	private function _checkFpsHealth():Void
@@ -357,7 +400,6 @@ class Main extends Sprite
 					cam.antialiasing = false;
 
 		_runGarbageCollection();
-		FlxG.log.add('[OPTIMIZER] Dynamic optimizations applied (low FPS detected)');
 	}
 
 	private function _restoreOptimizations():Void
@@ -373,61 +415,86 @@ class Main extends Sprite
 			for (cam in FlxG.cameras.list)
 				if (cam != null)
 					cam.antialiasing = antialiasing;
-
-		FlxG.log.add('[OPTIMIZER] Optimizations restored (FPS recovered)');
 	}
 
 	private function _setVSync(enabled:Bool):Void
 	{
 		#if desktop
-		Lib.current.stage.window.vsync = enabled;
+		try { Lib.current.stage.window.vsync = enabled; } catch (e:Dynamic) {}
 		#end
 	}
 
-	private function onKeyUp(e:KeyboardEvent):Void
+	private function _onKeyUp(e:KeyboardEvent):Void
 	{
-		if (Controls.instance.justReleased('fullscreen'))
-			FlxG.fullscreen = !FlxG.fullscreen;
+		try
+		{
+			if (Controls.instance.justReleased('fullscreen'))
+				FlxG.fullscreen = !FlxG.fullscreen;
+		}
+		catch (e:Dynamic) {}
 	}
 
-	private function onGameResized(w:Int, h:Int):Void
+	private function _onGameResized(w:Int, h:Int):Void
 	{
-		if (fpsVar != null)
+		try
 		{
-			var scaleX:Float = Lib.current.stage.stageWidth  / FlxG.width;
-			var scaleY:Float = Lib.current.stage.stageHeight / FlxG.height;
-			fpsVar.positionFPS(10, 3, Math.min(scaleX, scaleY));
+			if (fpsVar != null)
+			{
+				var scaleX:Float = Lib.current.stage.stageWidth  / FlxG.width;
+				var scaleY:Float = Lib.current.stage.stageHeight / FlxG.height;
+				fpsVar.positionFPS(10, 3, Math.min(scaleX, scaleY));
+			}
+
+			if (FlxG.cameras != null)
+				for (cam in FlxG.cameras.list)
+					if (cam != null && cam.filters != null)
+						resetSpriteCache(cam.flashSprite);
+
+			if (FlxG.game != null)
+				resetSpriteCache(FlxG.game);
 		}
-
-		if (FlxG.cameras != null)
-			for (cam in FlxG.cameras.list)
-				if (cam != null && cam.filters != null)
-					resetSpriteCache(cam.flashSprite);
-
-		if (FlxG.game != null)
-			resetSpriteCache(FlxG.game);
+		catch (e:Dynamic) {}
 	}
 
 	static function resetSpriteCache(sprite:Sprite):Void
 	{
-		@:privateAccess
+		try
 		{
-			sprite.__cacheBitmap     = null;
-			sprite.__cacheBitmapData = null;
+			@:privateAccess
+			{
+				sprite.__cacheBitmap     = null;
+				sprite.__cacheBitmapData = null;
+			}
 		}
+		catch (e:Dynamic) {}
 	}
 
 	public static function getUptime():Float
 	{
-		return Date.now().getTime() - (cast Lib.current.getChildAt(0):Main)._startTime;
+		try
+		{
+			var instance:Main = cast Lib.current.getChildAt(0);
+			return Date.now().getTime() - instance._startTime;
+		}
+		catch (e:Dynamic) { return 0.0; }
 	}
 
 	public static function getUptimeFormatted():String
 	{
-		var ms:Float    = getUptime();
-		var secs:Int    = Std.int(ms / 1000) % 60;
-		var mins:Int    = Std.int(ms / 60000) % 60;
-		var hours:Int   = Std.int(ms / 3600000);
+		var ms:Float   = getUptime();
+		var secs:Int   = Std.int(ms / 1000) % 60;
+		var mins:Int   = Std.int(ms / 60000) % 60;
+		var hours:Int  = Std.int(ms / 3600000);
 		return '${hours}h ${mins}m ${secs}s';
+	}
+
+	public static function getFrameCount():Int
+	{
+		try
+		{
+			var instance:Main = cast Lib.current.getChildAt(0);
+			return instance._frameCount;
+		}
+		catch (e:Dynamic) { return 0; }
 	}
 }
