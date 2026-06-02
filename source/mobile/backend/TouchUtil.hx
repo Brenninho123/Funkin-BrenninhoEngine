@@ -1,34 +1,8 @@
-/*
- * Copyright (C) 2024 Mobile Porting Team
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
- */
-
 package mobile.backend;
 
 import flixel.FlxObject;
 import flixel.input.touch.FlxTouch;
 
-/**
- * ...
- * @author: Karim Akra
- */
 class TouchUtil
 {
 	public static var pressed(get, never):Bool;
@@ -39,76 +13,62 @@ class TouchUtil
 
 	public static function overlaps(object:FlxObject, ?camera:FlxCamera):Bool
 	{
-		for (touch in FlxG.touches.list)
-			if (touch.overlaps(object, camera ?? object.camera))
-				return true;
-
-		return false;
+		return _anyTouch((t:FlxTouch) -> t.overlaps(object, camera != null ? camera : object.camera));
 	}
 
 	public static function overlapsComplex(object:FlxObject, ?camera:FlxCamera):Bool
 	{
-		if (camera == null)
-			for (camera in object.cameras)
-				for (touch in FlxG.touches.list)
-					@:privateAccess
-					if (object.overlapsPoint(touch.getWorldPosition(camera, object._point), true, camera))
-						return true;
-		else
-			@:privateAccess
-			if (object.overlapsPoint(touch.getWorldPosition(camera, object._point), true, camera))
+		if (camera != null)
+			return _anyTouch((t:FlxTouch) ->
+			{
+				@:privateAccess
+				return object.overlapsPoint(t.getWorldPosition(camera, object._point), true, camera);
+			});
+
+		for (cam in object.cameras)
+			if (_anyTouch((t:FlxTouch) ->
+			{
+				@:privateAccess
+				return object.overlapsPoint(t.getWorldPosition(cam, object._point), true, cam);
+			}))
 				return true;
 
 		return false;
 	}
 
-	@:noCompletion
-	private static function get_pressed():Bool
+	public static function getFirstActive():FlxTouch
 	{
-		for (touch in FlxG.touches.list)
-			if (touch.pressed)
-				return true;
+		return _findTouch((t:FlxTouch) -> t.pressed) ?? FlxG.touches.getFirst();
+	}
 
+	public static function getAll(?filter:FlxTouch->Bool):Array<FlxTouch>
+	{
+		if (filter == null) return FlxG.touches.list.copy();
+		return FlxG.touches.list.filter(filter);
+	}
+
+	public static function count(?filter:FlxTouch->Bool):Int
+	{
+		return getAll(filter).length;
+	}
+
+	private static function _anyTouch(check:FlxTouch->Bool):Bool
+	{
+		for (t in FlxG.touches.list)
+			if (check(t)) return true;
 		return false;
 	}
 
-	@:noCompletion
-	private static function get_justPressed():Bool
+	private static function _findTouch(check:FlxTouch->Bool):Null<FlxTouch>
 	{
-		for (touch in FlxG.touches.list)
-			if (touch.justPressed)
-				return true;
-
-		return false;
+		for (t in FlxG.touches.list)
+			if (check(t)) return t;
+		return null;
 	}
 
-	@:noCompletion
-	private static function get_justReleased():Bool
-	{
-		for (touch in FlxG.touches.list)
-			if (touch.justReleased)
-				return true;
-
-		return false;
-	}
-
-	@:noCompletion
-	private static function get_released():Bool
-	{
-		for (touch in FlxG.touches.list)
-			if (touch.released)
-				return true;
-
-		return false;
-	}
-
-	@:noCompletion
-	private static function get_touch():FlxTouch
-	{
-		for (touch in FlxG.touches.list)
-			if (touch != null)
-				return touch;
-
-		return FlxG.touches.getFirst();
-	}
+	@:noCompletion private static function get_pressed():Bool      return _anyTouch((t) -> t.pressed);
+	@:noCompletion private static function get_justPressed():Bool  return _anyTouch((t) -> t.justPressed);
+	@:noCompletion private static function get_justReleased():Bool return _anyTouch((t) -> t.justReleased);
+	@:noCompletion private static function get_released():Bool     return _anyTouch((t) -> t.released);
+	@:noCompletion private static function get_touch():FlxTouch    return _findTouch((t) -> t != null) ?? FlxG.touches.getFirst();
 }
