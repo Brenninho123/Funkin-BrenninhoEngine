@@ -2,7 +2,10 @@ package backend.system;
 
 import debug.FPSCounter;
 import api.APISystem;
+import api.APIHelper;
+import audio.Audio;
 import online.Online;
+import online.users.OnlineUsers;
 
 import flixel.FlxGame;
 import flixel.FlxState;
@@ -42,18 +45,22 @@ class Main extends Sprite
 	static final SKIP_SPLASH:Bool      = true;
 	static final START_FULLSCREEN:Bool = false;
 
-	static final GC_MEMORY_THRESHOLD:Float = 800 * 1024 * 1024;
-	static final GC_INTERVAL_MS:Float      = 30000;
-	static final FPS_LOW_THRESHOLD:Float   = 0.5;
-	static final FPS_CHECK_INTERVAL:Float  = 5000;
+	static final GC_MEMORY_THRESHOLD:Float  = 800 * 1024 * 1024;
+	static final GC_INTERVAL_MS:Float       = 30000;
+	static final FPS_LOW_THRESHOLD:Float    = 0.5;
+	static final FPS_CHECK_INTERVAL:Float   = 5000;
+	static final SYSTEMS_UPDATE_INTERVAL:Float = 1000;
 
 	public static var fpsVar:FPSCounter;
 	public static final platform:String = #if mobile "Mobile" #else "Desktop" #end;
 
-	private var _gcTimer:Float       = 0.0;
-	private var _fpsCheckTimer:Float = 0.0;
-	private var _lowFpsStrikes:Int   = 0;
-	private var _optimized:Bool      = false;
+	private var _gcTimer:Float           = 0.0;
+	private var _fpsCheckTimer:Float     = 0.0;
+	private var _systemsTimer:Float      = 0.0;
+	private var _lowFpsStrikes:Int       = 0;
+	private var _optimized:Bool          = false;
+	private var _paused:Bool             = false;
+	private var _startTime:Float         = 0.0;
 
 	public static function main():Void
 	{
@@ -68,6 +75,8 @@ class Main extends Sprite
 	{
 		super();
 
+		_startTime = Date.now().getTime();
+
 		#if android
 		StorageUtil.requestPermissions();
 		#end
@@ -76,9 +85,7 @@ class Main extends Sprite
 		Sys.setCwd(StorageUtil.getStorageDirectory());
 		#end
 
-		backend.CrashHandler.init();
-		APISystem.init();
-		Online.init();
+		_initSystems();
 
 		#if windows
 		@:functionCode('
@@ -91,6 +98,35 @@ class Main extends Sprite
 			init();
 		else
 			addEventListener(Event.ADDED_TO_STAGE, init);
+	}
+
+	private function _initSystems():Void
+	{
+		backend.CrashHandler.init();
+
+		APISystem.init();
+		APIHelper.init();
+
+		APIHelper.onThreatDetected = function(threat:String):Void
+		{
+			FlxG.log.add('[SECURITY THREAT] $threat');
+		};
+
+		Online.init();
+		Online.onConnectionChanged = function(connected:Bool):Void
+		{
+			FlxG.log.add('[ONLINE] Connection changed: ${connected ? "Online" : "Offline"}');
+			if (connected)
+				OnlineUsers.fetchUsers(null, null);
+		};
+
+		OnlineUsers.init();
+
+		Audio.init();
+		Audio.onVolumeChanged = function(volume:Float):Void
+		{
+			FlxG.log.add('[AUDIO] Master volume: $volume');
+		};
 	}
 
 	private function init(?e:Event):Void
@@ -180,17 +216,59 @@ class Main extends Sprite
 		#end
 
 		_applyPlatformOptimizations();
+		_setupWindowEvents();
 
 		FlxG.signals.gameResized.add(onGameResized);
 		addEventListener(Event.ENTER_FRAME, onEnterFrame);
 	}
 
+	private function _setupWindowEvents():Void
+	{
+		#if desktop
+		Lib.current.stage.window.onFocusIn.add(function():Void
+		{
+			_paused = false;
+			Audio.resumeAll();
+			FlxG.log.add('[WINDOW] Focus gained');
+		});
+
+		Lib.current.stage.window.onFocusOut.add(function():Void
+		{
+			_paused = true;
+			if (ClientPrefs.data.autoPause)
+				Audio.pauseAll();
+			FlxG.log.add('[WINDOW] Focus lost');
+		});
+
+		Lib.current.stage.window.onClose.add(function():Void
+		{
+			_onShutdown();
+		});
+		#end
+	}
+
+	private function _onShutdown():Void
+	{
+		APIHelper.flushAuditLog();
+		Online.clearPendingUploads();
+		Audio.stopAll();
+
+		#if DISCORD_ALLOWED
+		if (DiscordClient.isInitialized)
+			DiscordClient.shutdown();
+		#end
+	}
+
 	private function onEnterFrame(e:Event):Void
 	{
-		var elapsed:Float = FlxG.elapsed * 1000;
+		if (_paused) return;
 
-		_gcTimer       += elapsed;
-		_fpsCheckTimer += elapsed;
+		var elapsed:Float = FlxG.elapsed;
+		var elapsedMs:Float = elapsed * 1000;
+
+		_gcTimer       += elapsedMs;
+		_fpsCheckTimer += elapsedMs;
+		_systemsTimer  += elapsedMs;
 
 		if (_gcTimer >= GC_INTERVAL_MS)
 		{
@@ -203,11 +281,22 @@ class Main extends Sprite
 			_fpsCheckTimer = 0.0;
 			_checkFpsHealth();
 		}
+
+		if (_systemsTimer >= SYSTEMS_UPDATE_INTERVAL)
+		{
+			_systemsTimer = 0.0;
+			Online.update(elapsed);
+			OnlineUsers.update(elapsed);
+		}
+
+		Audio.update(elapsed);
 	}
 
 	private function _runGarbageCollection():Void
 	{
-		if (OpenFlSystem.totalMemory >= GC_MEMORY_THRESHOLD)
+		var mem:Float = OpenFlSystem.totalMemory;
+
+		if (mem >= GC_MEMORY_THRESHOLD)
 		{
 			OpenFlSystem.gc();
 			#if cpp
@@ -218,8 +307,7 @@ class Main extends Sprite
 
 	private function _checkFpsHealth():Void
 	{
-		if (fpsVar == null)
-			return;
+		if (fpsVar == null) return;
 
 		var threshold:Int = Std.int(FlxG.drawFramerate * FPS_LOW_THRESHOLD);
 
@@ -231,8 +319,7 @@ class Main extends Sprite
 		}
 		else
 		{
-			if (_lowFpsStrikes > 0)
-				_lowFpsStrikes--;
+			if (_lowFpsStrikes > 0) _lowFpsStrikes--;
 			if (_optimized && _lowFpsStrikes == 0)
 				_restoreOptimizations();
 		}
@@ -269,10 +356,8 @@ class Main extends Sprite
 				if (cam != null)
 					cam.antialiasing = false;
 
-		OpenFlSystem.gc();
-		#if cpp
-		cpp.NativeGc.run(true);
-		#end
+		_runGarbageCollection();
+		FlxG.log.add('[OPTIMIZER] Dynamic optimizations applied (low FPS detected)');
 	}
 
 	private function _restoreOptimizations():Void
@@ -288,6 +373,8 @@ class Main extends Sprite
 			for (cam in FlxG.cameras.list)
 				if (cam != null)
 					cam.antialiasing = antialiasing;
+
+		FlxG.log.add('[OPTIMIZER] Optimizations restored (FPS recovered)');
 	}
 
 	private function _setVSync(enabled:Bool):Void
@@ -328,5 +415,19 @@ class Main extends Sprite
 			sprite.__cacheBitmap     = null;
 			sprite.__cacheBitmapData = null;
 		}
+	}
+
+	public static function getUptime():Float
+	{
+		return Date.now().getTime() - (cast Lib.current.getChildAt(0):Main)._startTime;
+	}
+
+	public static function getUptimeFormatted():String
+	{
+		var ms:Float    = getUptime();
+		var secs:Int    = Std.int(ms / 1000) % 60;
+		var mins:Int    = Std.int(ms / 60000) % 60;
+		var hours:Int   = Std.int(ms / 3600000);
+		return '${hours}h ${mins}m ${secs}s';
 	}
 }
