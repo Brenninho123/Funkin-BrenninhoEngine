@@ -4,6 +4,7 @@ import flixel.FlxG;
 import openfl.text.TextField;
 import openfl.text.TextFormat;
 import openfl.display.Sprite;
+import openfl.display.Shape;
 import openfl.system.System as OpenFlSystem;
 
 #if cpp
@@ -21,10 +22,10 @@ class FPSCounter extends Sprite
 	public var currentFPS(default, null):Int = 0;
 
 	private var _textField:TextField;
-	private var _bg:openfl.display.Shape;
-	private var _times:Array<Float> = [];
-	private var _deltaTimeout:Float = 0.0;
-	private var _systemName:String  = '';
+	private var _bg:Shape;
+	private var _times:Array<Float>  = [];
+	private var _deltaTimeout:Float  = 0.0;
+	private var _systemName:String   = '';
 
 	public function new(x:Float = 10, y:Float = 10, color:Int = 0xFFFFFF)
 	{
@@ -32,25 +33,23 @@ class FPSCounter extends Sprite
 
 		_systemName = _detectSystem();
 
-		_bg = new openfl.display.Shape();
+		_bg = new Shape();
 		addChild(_bg);
 
 		_textField = new TextField();
 		_textField.selectable   = false;
 		_textField.mouseEnabled = false;
 		_textField.multiline    = true;
+		_textField.autoSize     = openfl.text.TextFieldAutoSize.LEFT;
 		_textField.defaultTextFormat = new TextFormat('_sans', 13, color);
-		_textField.width  = 420;
-		_textField.height = 22;
-		_textField.text   = 'FPS: 0 • Memory: 0MB • System: $_systemName';
+		_textField.text = 'FPS: 0 • Memory: 0MB • System: $_systemName';
 		addChild(_textField);
 
 		positionFPS(x, y);
 		_drawBg();
 	}
 
-	@:access(openfl.display.DisplayObject)
-	private function __enterFrame(deltaTime:Float):Void
+	override private function __enterFrame(deltaTime:Float):Void
 	{
 		_deltaTimeout += deltaTime;
 
@@ -72,7 +71,7 @@ class FPSCounter extends Sprite
 
 	public dynamic function updateText():Void
 	{
-		var mem:Float  = OpenFlSystem.totalMemory;
+		var mem:Float     = OpenFlSystem.totalMemory;
 		var memStr:String = _formatMemory(mem);
 
 		_textField.text = 'FPS: $currentFPS • Memory: $memStr • System: $_systemName';
@@ -92,15 +91,11 @@ class FPSCounter extends Sprite
 		this.y = FlxG.game.y + Y;
 	}
 
-	public var visible(get, set):Bool;
-	private function get_visible():Bool return super.visible;
-	private function set_visible(v:Bool):Bool { super.visible = v; return v; }
-
 	private function _drawBg():Void
 	{
-		var pad:Float  = 4;
-		var w:Float    = _textField.textWidth + pad * 2 + 8;
-		var h:Float    = 20;
+		var pad:Float = 5;
+		var w:Float   = _textField.textWidth + pad * 2 + 10;
+		var h:Float   = 20;
 
 		_bg.graphics.clear();
 		_bg.graphics.beginFill(0x000000, 0.55);
@@ -117,12 +112,12 @@ class FPSCounter extends Sprite
 
 	private function _detectSystem():String
 	{
-		#if windows  return 'Windows'; #end
-		#if mac      return 'macOS';   #end
-		#if linux    return 'Linux';   #end
-		#if android  return 'Android'; #end
-		#if ios      return 'iOS';     #end
-		#if html5    return 'Web';     #end
+		#if windows return 'Windows'; #end
+		#if mac     return 'macOS';   #end
+		#if linux   return 'Linux';   #end
+		#if android return 'Android'; #end
+		#if ios     return 'iOS';     #end
+		#if html5   return 'Web';     #end
 		return 'Unknown';
 	}
 
