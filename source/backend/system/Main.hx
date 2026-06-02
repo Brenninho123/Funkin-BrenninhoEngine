@@ -3,6 +3,7 @@ package backend.system;
 import debug.FPSCounter;
 import api.APISystem;
 import api.APIHelper;
+import api.piracy.AntiPiracy;
 import audio.Audio;
 import online.Online;
 import online.users.OnlineUsers;
@@ -43,24 +44,27 @@ static void _applyWindowsHints()
 
 class Main extends Sprite
 {
-	static final GAME_WIDTH:Int            = 1280;
-	static final GAME_HEIGHT:Int           = 720;
-	static final FRAMERATE:Int             = 60;
-	static final SKIP_SPLASH:Bool          = true;
-	static final START_FULLSCREEN:Bool     = false;
-	static final GC_MEMORY_THRESHOLD:Float = 800 * 1024 * 1024;
-	static final GC_INTERVAL_MS:Float      = 30000;
-	static final FPS_LOW_THRESHOLD:Float   = 0.5;
-	static final FPS_CHECK_INTERVAL:Float  = 5000;
-	static final SYSTEMS_UPDATE_MS:Float   = 2000;
+	static final GAME_WIDTH:Int              = 1280;
+	static final GAME_HEIGHT:Int             = 720;
+	static final FRAMERATE:Int               = 60;
+	static final SKIP_SPLASH:Bool            = true;
+	static final START_FULLSCREEN:Bool       = false;
+	static final GC_MEMORY_THRESHOLD:Float   = 800 * 1024 * 1024;
+	static final GC_INTERVAL_MS:Float        = 30000;
+	static final FPS_LOW_THRESHOLD:Float     = 0.5;
+	static final FPS_CHECK_INTERVAL:Float    = 5000;
+	static final SYSTEMS_UPDATE_MS:Float     = 2000;
 	static final MEMORY_WARN_THRESHOLD:Float = 600 * 1024 * 1024;
+	static final MEM_CHECK_INTERVAL:Float    = 5000;
+	static final FPS_HISTORY_SIZE:Int        = 12;
 
 	public static var fpsVar:FPSCounter;
 	public static final platform:String = #if mobile "Mobile" #else "Desktop" #end;
 
-	public static var onCrash:String->Void        = null;
-	public static var onMemoryWarning:Float->Void = null;
-	public static var onFocusChange:Bool->Void    = null;
+	public static var onCrash:String->Void         = null;
+	public static var onMemoryWarning:Float->Void  = null;
+	public static var onFocusChange:Bool->Void     = null;
+	public static var onSystemsReady:Void->Void    = null;
 
 	private var _gcTimer:Float         = 0.0;
 	private var _fpsCheckTimer:Float   = 0.0;
@@ -75,6 +79,7 @@ class Main extends Sprite
 	private var _memoryPeak:Float      = 0.0;
 	private var _lastMemory:Float      = 0.0;
 	private var _fpsHistory:Array<Int> = [];
+	private var _systemsReady:Bool     = false;
 
 	public static function main():Void
 	{
@@ -242,6 +247,33 @@ class Main extends Sprite
 
 		try
 		{
+			AntiPiracy.init();
+			AntiPiracy.onPiracyDetected = function(reason:String):Void
+			{
+				FlxG.log.add('[ANTIPIRACY] Piracy detected: $reason');
+			};
+			AntiPiracy.onTamperDetected = function(file:String):Void
+			{
+				FlxG.log.add('[ANTIPIRACY] File tampered: $file');
+			};
+			AntiPiracy.onForkDetected = function(reason:String):Void
+			{
+				FlxG.log.add('[ANTIPIRACY] Fork detected: $reason');
+			};
+
+			var result = AntiPiracy.verify();
+			if (!result.verified)
+				FlxG.log.add('[ANTIPIRACY] FAILED — ${result.violations.join(" | ")}');
+			else
+				FlxG.log.add('[ANTIPIRACY] Verified OK');
+		}
+		catch (e:Dynamic)
+		{
+			FlxG.log.add('[WARN] AntiPiracy failed: $e');
+		}
+
+		try
+		{
 			Online.init();
 			Online.onConnectionChanged = function(connected:Bool):Void
 			{
@@ -274,6 +306,11 @@ class Main extends Sprite
 		{
 			FlxG.log.add('[WARN] PlayerPoints failed: $e');
 		}
+
+		_systemsReady = true;
+		if (onSystemsReady != null) onSystemsReady();
+
+		FlxG.log.add('[MAIN] All systems initialized in ${getUptimeFormatted()}');
 	}
 
 	private function _setupWindowEvents():Void
@@ -307,10 +344,13 @@ class Main extends Sprite
 
 	private function _onShutdown():Void
 	{
+		FlxG.log.add('[MAIN] Shutting down — uptime: ${getUptimeFormatted()} — frames: $_frameCount');
+
 		try { online.gameplay.PlayerPoints.save(); } catch (e:Dynamic) {}
 		try { APIHelper.flushAuditLog(); }           catch (e:Dynamic) {}
 		try { Online.clearPendingUploads(); }         catch (e:Dynamic) {}
 		try { Audio.stopAll(); }                      catch (e:Dynamic) {}
+		try { AntiPiracy.getViolationLog(); }         catch (e:Dynamic) {}
 
 		#if DISCORD_ALLOWED
 		try
@@ -320,14 +360,13 @@ class Main extends Sprite
 		}
 		catch (e:Dynamic) {}
 		#end
-
-		FlxG.log.add('[MAIN] Clean shutdown after ${getUptimeFormatted()} — ${_frameCount} frames');
 	}
 
 	private function _onFocusGained():Void
 	{
 		_paused = false;
 		try { Audio.resumeAll(); } catch (e:Dynamic) {}
+		if (onFocusChange != null) onFocusChange(true);
 	}
 
 	private function _onFocusLost():Void
@@ -335,6 +374,7 @@ class Main extends Sprite
 		_paused = true;
 		if (ClientPrefs.data.autoPause)
 			try { Audio.pauseAll(); } catch (e:Dynamic) {}
+		if (onFocusChange != null) onFocusChange(false);
 	}
 
 	private function _onEnterFrame(e:Event):Void
@@ -371,7 +411,7 @@ class Main extends Sprite
 			try { OnlineUsers.update(elapsed); } catch (e:Dynamic) {}
 		}
 
-		if (_memCheckTimer >= 5000)
+		if (_memCheckTimer >= MEM_CHECK_INTERVAL)
 		{
 			_memCheckTimer = 0.0;
 			_checkMemory();
@@ -386,13 +426,14 @@ class Main extends Sprite
 		{
 			var mem:Float = OpenFlSystem.totalMemory;
 
-			if (mem > _memoryPeak)
-				_memoryPeak = mem;
-
+			if (mem > _memoryPeak) _memoryPeak = mem;
 			_lastMemory = mem;
 
-			if (mem >= MEMORY_WARN_THRESHOLD && onMemoryWarning != null)
-				onMemoryWarning(mem);
+			if (mem >= MEMORY_WARN_THRESHOLD)
+			{
+				if (onMemoryWarning != null) onMemoryWarning(mem);
+				FlxG.log.add('[MEMORY] Warning: ${Math.round(mem / 1048576)}MB used');
+			}
 		}
 		catch (e:Dynamic) {}
 	}
@@ -401,7 +442,7 @@ class Main extends Sprite
 	{
 		if (fpsVar == null) return;
 		_fpsHistory.push(fpsVar.currentFPS);
-		if (_fpsHistory.length > 12)
+		if (_fpsHistory.length > FPS_HISTORY_SIZE)
 			_fpsHistory.shift();
 	}
 
@@ -415,6 +456,7 @@ class Main extends Sprite
 				#if cpp
 				cpp.NativeGc.run(true);
 				#end
+				FlxG.log.add('[GC] Collected — memory was ${Math.round(_lastMemory / 1048576)}MB');
 			}
 		}
 		catch (e:Dynamic) {}
@@ -472,7 +514,7 @@ class Main extends Sprite
 					cam.antialiasing = false;
 
 		_runGarbageCollection();
-		FlxG.log.add('[OPTIMIZER] Dynamic optimizations applied');
+		FlxG.log.add('[OPTIMIZER] Dynamic optimizations applied — FPS was low');
 	}
 
 	private function _restoreOptimizations():Void
@@ -489,7 +531,7 @@ class Main extends Sprite
 				if (cam != null)
 					cam.antialiasing = antialiasing;
 
-		FlxG.log.add('[OPTIMIZER] Optimizations restored');
+		FlxG.log.add('[OPTIMIZER] Optimizations restored — FPS recovered');
 	}
 
 	private function _setVSync(enabled:Bool):Void
@@ -582,9 +624,9 @@ class Main extends Sprite
 	public static function getMemoryUsageFormatted():String
 	{
 		var bytes:Float = getMemoryUsage();
-		if (bytes < 1024)        return '${bytes}B';
-		if (bytes < 1048576)     return '${Math.round(bytes / 1024)}KB';
-		if (bytes < 1073741824)  return '${Math.round(bytes / 1048576)}MB';
+		if (bytes < 1024)       return '${bytes}B';
+		if (bytes < 1048576)    return '${Math.round(bytes / 1024)}KB';
+		if (bytes < 1073741824) return '${Math.round(bytes / 1048576)}MB';
 		return '${Math.round(bytes / 1073741824)}GB';
 	}
 
@@ -631,6 +673,16 @@ class Main extends Sprite
 		catch (e:Dynamic) { return false; }
 	}
 
+	public static function areSystemsReady():Bool
+	{
+		try
+		{
+			var instance:Main = cast Lib.current.getChildAt(0);
+			return instance._systemsReady;
+		}
+		catch (e:Dynamic) { return false; }
+	}
+
 	public static function getDebugInfo():String
 	{
 		return [
@@ -639,10 +691,12 @@ class Main extends Sprite
 			'Frames: ${getFrameCount()}',
 			'FPS avg: ${Math.round(getAverageFPS())}',
 			'Memory: ${getMemoryUsageFormatted()}',
-			'Memory peak: ${Math.round(getMemoryPeak() / 1048576)}MB',
+			'Mem peak: ${Math.round(getMemoryPeak() / 1048576)}MB',
 			'Optimized: ${isOptimized()}',
 			'Online: ${Online.isConnected}',
-			'Users: ${OnlineUsers.getUserCount()}'
+			'Users: ${OnlineUsers.getUserCount()}',
+			'Verified: ${AntiPiracy.isVerified}',
+			'Systems: ${areSystemsReady()}'
 		].join(' | ');
 	}
 }
