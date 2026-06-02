@@ -33,22 +33,25 @@ import lime.graphics.Image;
 @:cppFileCode('
 #include <windows.h>
 #include <winuser.h>
+static void _applyWindowsHints() {
+	setProcessDPIAware();
+	DisableProcessWindowsGhosting();
+}
 ')
 #end
 
 class Main extends Sprite
 {
-	static final GAME_WIDTH:Int        = 1280;
-	static final GAME_HEIGHT:Int       = 720;
-	static final FRAMERATE:Int         = 60;
-	static final SKIP_SPLASH:Bool      = true;
-	static final START_FULLSCREEN:Bool = false;
-
-	static final GC_MEMORY_THRESHOLD:Float     = 800 * 1024 * 1024;
-	static final GC_INTERVAL_MS:Float          = 30000;
-	static final FPS_LOW_THRESHOLD:Float       = 0.5;
-	static final FPS_CHECK_INTERVAL:Float      = 5000;
-	static final SYSTEMS_UPDATE_INTERVAL:Float = 2000;
+	static final GAME_WIDTH:Int            = 1280;
+	static final GAME_HEIGHT:Int           = 720;
+	static final FRAMERATE:Int             = 60;
+	static final SKIP_SPLASH:Bool          = true;
+	static final START_FULLSCREEN:Bool     = false;
+	static final GC_MEMORY_THRESHOLD:Float = 800 * 1024 * 1024;
+	static final GC_INTERVAL_MS:Float      = 30000;
+	static final FPS_LOW_THRESHOLD:Float   = 0.5;
+	static final FPS_CHECK_INTERVAL:Float  = 5000;
+	static final SYSTEMS_UPDATE_MS:Float   = 2000;
 
 	public static var fpsVar:FPSCounter;
 	public static final platform:String = #if mobile "Mobile" #else "Desktop" #end;
@@ -78,6 +81,10 @@ class Main extends Sprite
 
 		_startTime = Date.now().getTime();
 
+		#if windows
+		@:functionCode('_applyWindowsHints();')
+		#end
+
 		#if android
 		try { StorageUtil.requestPermissions(); } catch (e:Dynamic) {}
 		#end
@@ -102,18 +109,7 @@ class Main extends Sprite
 		if (_setupDone) return;
 		_setupDone = true;
 
-		_initWindowHints();
 		_setupGame();
-	}
-
-	private function _initWindowHints():Void
-	{
-		#if windows
-		@:functionCode('
-			setProcessDPIAware();
-			DisableProcessWindowsGhosting();
-		')
-		#end
 	}
 
 	private function _setupGame():Void
@@ -323,7 +319,7 @@ class Main extends Sprite
 			_checkFpsHealth();
 		}
 
-		if (_systemsTimer >= SYSTEMS_UPDATE_INTERVAL)
+		if (_systemsTimer >= SYSTEMS_UPDATE_MS)
 		{
 			_systemsTimer = 0.0;
 			try { Online.update(elapsed); }      catch (e:Dynamic) {}
