@@ -53,15 +53,15 @@ class Main extends Sprite
 	public static var fpsVar:FPSCounter;
 	public static final platform:String = #if mobile "Mobile" #else "Desktop" #end;
 
-	private var _gcTimer:Float           = 0.0;
-	private var _fpsCheckTimer:Float     = 0.0;
-	private var _systemsTimer:Float      = 0.0;
-	private var _lowFpsStrikes:Int       = 0;
-	private var _optimized:Bool          = false;
-	private var _paused:Bool             = false;
-	private var _startTime:Float         = 0.0;
-	private var _frameCount:Int          = 0;
-	private var _setupDone:Bool          = false;
+	private var _gcTimer:Float       = 0.0;
+	private var _fpsCheckTimer:Float = 0.0;
+	private var _systemsTimer:Float  = 0.0;
+	private var _lowFpsStrikes:Int   = 0;
+	private var _optimized:Bool      = false;
+	private var _paused:Bool         = false;
+	private var _startTime:Float     = 0.0;
+	private var _frameCount:Int      = 0;
+	private var _setupDone:Bool      = false;
 
 	public static function main():Void
 	{
@@ -116,63 +116,23 @@ class Main extends Sprite
 		#end
 	}
 
-	private function _initSystems():Void
-	{
-		try
-		{
-			APISystem.init();
-			APIHelper.init();
-
-			APIHelper.onThreatDetected = function(threat:String):Void
-			{
-				FlxG.log.add('[SECURITY] $threat');
-			};
-		}
-		catch (e:Dynamic)
-		{
-			FlxG.log.add('[WARN] API systems failed to init: $e');
-		}
-
-		try
-		{
-			Online.init();
-			Online.onConnectionChanged = function(connected:Bool):Void
-			{
-				if (connected) OnlineUsers.fetchUsers(null, null);
-			};
-			OnlineUsers.init();
-		}
-		catch (e:Dynamic)
-		{
-			FlxG.log.add('[WARN] Online systems failed to init: $e');
-		}
-
-		try
-		{
-			Audio.init();
-			Audio.onVolumeChanged = function(volume:Float):Void {};
-		}
-		catch (e:Dynamic)
-		{
-			FlxG.log.add('[WARN] Audio system failed to init: $e');
-		}
-	}
-
 	private function _setupGame():Void
 	{
-		var zoom:Float = 1.0;
+		var finalWidth:Int  = GAME_WIDTH;
+		var finalHeight:Int = GAME_HEIGHT;
+		var zoom:Float      = 1.0;
 
 		#if (openfl <= "9.2.0")
 		var stageWidth:Int  = Lib.current.stage.stageWidth;
 		var stageHeight:Int = Lib.current.stage.stageHeight;
-		var ratioX:Float    = stageWidth  / GAME_WIDTH;
-		var ratioY:Float    = stageHeight / GAME_HEIGHT;
-		zoom                = Math.min(ratioX, ratioY);
-		var finalWidth:Int  = Math.ceil(stageWidth  / zoom);
-		var finalHeight:Int = Math.ceil(stageHeight / zoom);
-		#else
-		var finalWidth:Int  = GAME_WIDTH;
-		var finalHeight:Int = GAME_HEIGHT;
+		if (stageWidth > 0 && stageHeight > 0)
+		{
+			var ratioX:Float = stageWidth  / GAME_WIDTH;
+			var ratioY:Float = stageHeight / GAME_HEIGHT;
+			zoom             = Math.min(ratioX, ratioY);
+			finalWidth       = Math.ceil(stageWidth  / zoom);
+			finalHeight      = Math.ceil(stageHeight / zoom);
+		}
 		#end
 
 		#if LUA_ALLOWED
@@ -196,16 +156,16 @@ class Main extends Sprite
 		var initialState:Class<FlxState> = TitleState;
 		#end
 
-		var game:FlxGame = new FlxGame(
-			finalWidth,
-			finalHeight,
-			initialState,
-			#if (flixel < "5.0.0") zoom, #end
-			FRAMERATE,
-			FRAMERATE,
-			SKIP_SPLASH,
-			START_FULLSCREEN
-		);
+		_createGame(finalWidth, finalHeight, zoom, initialState);
+	}
+
+	private function _createGame(width:Int, height:Int, zoom:Float, initialState:Class<FlxState>):Void
+	{
+		#if (flixel < "5.0.0")
+		var game:FlxGame = new FlxGame(width, height, initialState, zoom, FRAMERATE, FRAMERATE, SKIP_SPLASH, START_FULLSCREEN);
+		#else
+		var game:FlxGame = new FlxGame(width, height, initialState, FRAMERATE, FRAMERATE, SKIP_SPLASH, START_FULLSCREEN);
+		#end
 
 		addChild(game);
 
@@ -255,6 +215,46 @@ class Main extends Sprite
 		_initSystems();
 	}
 
+	private function _initSystems():Void
+	{
+		try
+		{
+			APISystem.init();
+			APIHelper.init();
+			APIHelper.onThreatDetected = function(threat:String):Void
+			{
+				FlxG.log.add('[SECURITY] $threat');
+			};
+		}
+		catch (e:Dynamic)
+		{
+			FlxG.log.add('[WARN] API systems failed: $e');
+		}
+
+		try
+		{
+			Online.init();
+			Online.onConnectionChanged = function(connected:Bool):Void
+			{
+				if (connected) OnlineUsers.fetchUsers(null, null);
+			};
+			OnlineUsers.init();
+		}
+		catch (e:Dynamic)
+		{
+			FlxG.log.add('[WARN] Online systems failed: $e');
+		}
+
+		try
+		{
+			Audio.init();
+		}
+		catch (e:Dynamic)
+		{
+			FlxG.log.add('[WARN] Audio system failed: $e');
+		}
+	}
+
 	private function _setupWindowEvents():Void
 	{
 		#if desktop
@@ -284,7 +284,7 @@ class Main extends Sprite
 
 	private function _onShutdown():Void
 	{
-		try { APIHelper.flushAuditLog(); }   catch (e:Dynamic) {}
+		try { APIHelper.flushAuditLog(); }    catch (e:Dynamic) {}
 		try { Online.clearPendingUploads(); } catch (e:Dynamic) {}
 		try { Audio.stopAll(); }              catch (e:Dynamic) {}
 
@@ -481,10 +481,10 @@ class Main extends Sprite
 
 	public static function getUptimeFormatted():String
 	{
-		var ms:Float   = getUptime();
-		var secs:Int   = Std.int(ms / 1000) % 60;
-		var mins:Int   = Std.int(ms / 60000) % 60;
-		var hours:Int  = Std.int(ms / 3600000);
+		var ms:Float  = getUptime();
+		var secs:Int  = Std.int(ms / 1000) % 60;
+		var mins:Int  = Std.int(ms / 60000) % 60;
+		var hours:Int = Std.int(ms / 3600000);
 		return '${hours}h ${mins}m ${secs}s';
 	}
 
