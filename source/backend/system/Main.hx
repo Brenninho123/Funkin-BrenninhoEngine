@@ -33,9 +33,10 @@ import lime.graphics.Image;
 @:cppFileCode('
 #include <windows.h>
 #include <winuser.h>
-static void _applyWindowsHints() {
-	setProcessDPIAware();
-	DisableProcessWindowsGhosting();
+static void _applyWindowsHints()
+{
+	::SetProcessDPIAware();
+	::DisableProcessWindowsGhosting();
 }
 ')
 #end
@@ -52,19 +53,28 @@ class Main extends Sprite
 	static final FPS_LOW_THRESHOLD:Float   = 0.5;
 	static final FPS_CHECK_INTERVAL:Float  = 5000;
 	static final SYSTEMS_UPDATE_MS:Float   = 2000;
+	static final MEMORY_WARN_THRESHOLD:Float = 600 * 1024 * 1024;
 
 	public static var fpsVar:FPSCounter;
 	public static final platform:String = #if mobile "Mobile" #else "Desktop" #end;
 
-	private var _gcTimer:Float       = 0.0;
-	private var _fpsCheckTimer:Float = 0.0;
-	private var _systemsTimer:Float  = 0.0;
-	private var _lowFpsStrikes:Int   = 0;
-	private var _optimized:Bool      = false;
-	private var _paused:Bool         = false;
-	private var _startTime:Float     = 0.0;
-	private var _frameCount:Int      = 0;
-	private var _setupDone:Bool      = false;
+	public static var onCrash:String->Void        = null;
+	public static var onMemoryWarning:Float->Void = null;
+	public static var onFocusChange:Bool->Void    = null;
+
+	private var _gcTimer:Float         = 0.0;
+	private var _fpsCheckTimer:Float   = 0.0;
+	private var _systemsTimer:Float    = 0.0;
+	private var _memCheckTimer:Float   = 0.0;
+	private var _lowFpsStrikes:Int     = 0;
+	private var _optimized:Bool        = false;
+	private var _paused:Bool           = false;
+	private var _startTime:Float       = 0.0;
+	private var _frameCount:Int        = 0;
+	private var _setupDone:Bool        = false;
+	private var _memoryPeak:Float      = 0.0;
+	private var _lastMemory:Float      = 0.0;
+	private var _fpsHistory:Array<Int> = [];
 
 	public static function main():Void
 	{
@@ -206,6 +216,9 @@ class Main extends Sprite
 		_setupWindowEvents();
 
 		FlxG.signals.gameResized.add(_onGameResized);
+		FlxG.signals.focusGained.add(_onFocusGained);
+		FlxG.signals.focusLost.add(_onFocusLost);
+
 		addEventListener(Event.ENTER_FRAME, _onEnterFrame);
 
 		_initSystems();
@@ -244,10 +257,22 @@ class Main extends Sprite
 		try
 		{
 			Audio.init();
+			Audio.onVolumeChanged = function(v:Float):Void {};
 		}
 		catch (e:Dynamic)
 		{
 			FlxG.log.add('[WARN] Audio system failed: $e');
+		}
+
+		try
+		{
+			online.gameplay.PlayerPoints.init(
+				OnlineUsers.currentUser != null ? OnlineUsers.currentUser.username : 'Player'
+			);
+		}
+		catch (e:Dynamic)
+		{
+			FlxG.log.add('[WARN] PlayerPoints failed: $e');
 		}
 	}
 
@@ -260,6 +285,7 @@ class Main extends Sprite
 			{
 				_paused = false;
 				try { Audio.resumeAll(); } catch (e:Dynamic) {}
+				if (onFocusChange != null) onFocusChange(true);
 			});
 
 			Lib.current.stage.window.onFocusOut.add(function():Void
@@ -267,6 +293,7 @@ class Main extends Sprite
 				_paused = true;
 				if (ClientPrefs.data.autoPause)
 					try { Audio.pauseAll(); } catch (e:Dynamic) {}
+				if (onFocusChange != null) onFocusChange(false);
 			});
 
 			Lib.current.stage.window.onClose.add(function():Void
@@ -280,9 +307,10 @@ class Main extends Sprite
 
 	private function _onShutdown():Void
 	{
-		try { APIHelper.flushAuditLog(); }    catch (e:Dynamic) {}
-		try { Online.clearPendingUploads(); } catch (e:Dynamic) {}
-		try { Audio.stopAll(); }              catch (e:Dynamic) {}
+		try { online.gameplay.PlayerPoints.save(); } catch (e:Dynamic) {}
+		try { APIHelper.flushAuditLog(); }           catch (e:Dynamic) {}
+		try { Online.clearPendingUploads(); }         catch (e:Dynamic) {}
+		try { Audio.stopAll(); }                      catch (e:Dynamic) {}
 
 		#if DISCORD_ALLOWED
 		try
@@ -292,6 +320,21 @@ class Main extends Sprite
 		}
 		catch (e:Dynamic) {}
 		#end
+
+		FlxG.log.add('[MAIN] Clean shutdown after ${getUptimeFormatted()} — ${_frameCount} frames');
+	}
+
+	private function _onFocusGained():Void
+	{
+		_paused = false;
+		try { Audio.resumeAll(); } catch (e:Dynamic) {}
+	}
+
+	private function _onFocusLost():Void
+	{
+		_paused = true;
+		if (ClientPrefs.data.autoPause)
+			try { Audio.pauseAll(); } catch (e:Dynamic) {}
 	}
 
 	private function _onEnterFrame(e:Event):Void
@@ -306,6 +349,7 @@ class Main extends Sprite
 		_gcTimer       += elapsedMs;
 		_fpsCheckTimer += elapsedMs;
 		_systemsTimer  += elapsedMs;
+		_memCheckTimer += elapsedMs;
 
 		if (_gcTimer >= GC_INTERVAL_MS)
 		{
@@ -317,6 +361,7 @@ class Main extends Sprite
 		{
 			_fpsCheckTimer = 0.0;
 			_checkFpsHealth();
+			_recordFpsHistory();
 		}
 
 		if (_systemsTimer >= SYSTEMS_UPDATE_MS)
@@ -326,7 +371,38 @@ class Main extends Sprite
 			try { OnlineUsers.update(elapsed); } catch (e:Dynamic) {}
 		}
 
+		if (_memCheckTimer >= 5000)
+		{
+			_memCheckTimer = 0.0;
+			_checkMemory();
+		}
+
 		try { Audio.update(elapsed); } catch (e:Dynamic) {}
+	}
+
+	private function _checkMemory():Void
+	{
+		try
+		{
+			var mem:Float = OpenFlSystem.totalMemory;
+
+			if (mem > _memoryPeak)
+				_memoryPeak = mem;
+
+			_lastMemory = mem;
+
+			if (mem >= MEMORY_WARN_THRESHOLD && onMemoryWarning != null)
+				onMemoryWarning(mem);
+		}
+		catch (e:Dynamic) {}
+	}
+
+	private function _recordFpsHistory():Void
+	{
+		if (fpsVar == null) return;
+		_fpsHistory.push(fpsVar.currentFPS);
+		if (_fpsHistory.length > 12)
+			_fpsHistory.shift();
 	}
 
 	private function _runGarbageCollection():Void
@@ -396,6 +472,7 @@ class Main extends Sprite
 					cam.antialiasing = false;
 
 		_runGarbageCollection();
+		FlxG.log.add('[OPTIMIZER] Dynamic optimizations applied');
 	}
 
 	private function _restoreOptimizations():Void
@@ -411,6 +488,8 @@ class Main extends Sprite
 			for (cam in FlxG.cameras.list)
 				if (cam != null)
 					cam.antialiasing = antialiasing;
+
+		FlxG.log.add('[OPTIMIZER] Optimizations restored');
 	}
 
 	private function _setVSync(enabled:Bool):Void
@@ -492,5 +571,78 @@ class Main extends Sprite
 			return instance._frameCount;
 		}
 		catch (e:Dynamic) { return 0; }
+	}
+
+	public static function getMemoryUsage():Float
+	{
+		try { return OpenFlSystem.totalMemory; }
+		catch (e:Dynamic) { return 0.0; }
+	}
+
+	public static function getMemoryUsageFormatted():String
+	{
+		var bytes:Float = getMemoryUsage();
+		if (bytes < 1024)        return '${bytes}B';
+		if (bytes < 1048576)     return '${Math.round(bytes / 1024)}KB';
+		if (bytes < 1073741824)  return '${Math.round(bytes / 1048576)}MB';
+		return '${Math.round(bytes / 1073741824)}GB';
+	}
+
+	public static function getMemoryPeak():Float
+	{
+		try
+		{
+			var instance:Main = cast Lib.current.getChildAt(0);
+			return instance._memoryPeak;
+		}
+		catch (e:Dynamic) { return 0.0; }
+	}
+
+	public static function getAverageFPS():Float
+	{
+		try
+		{
+			var instance:Main = cast Lib.current.getChildAt(0);
+			if (instance._fpsHistory.length == 0) return 0.0;
+			var total:Int = 0;
+			for (fps in instance._fpsHistory) total += fps;
+			return total / instance._fpsHistory.length;
+		}
+		catch (e:Dynamic) { return 0.0; }
+	}
+
+	public static function isOptimized():Bool
+	{
+		try
+		{
+			var instance:Main = cast Lib.current.getChildAt(0);
+			return instance._optimized;
+		}
+		catch (e:Dynamic) { return false; }
+	}
+
+	public static function isPaused():Bool
+	{
+		try
+		{
+			var instance:Main = cast Lib.current.getChildAt(0);
+			return instance._paused;
+		}
+		catch (e:Dynamic) { return false; }
+	}
+
+	public static function getDebugInfo():String
+	{
+		return [
+			'Platform: $platform',
+			'Uptime: ${getUptimeFormatted()}',
+			'Frames: ${getFrameCount()}',
+			'FPS avg: ${Math.round(getAverageFPS())}',
+			'Memory: ${getMemoryUsageFormatted()}',
+			'Memory peak: ${Math.round(getMemoryPeak() / 1048576)}MB',
+			'Optimized: ${isOptimized()}',
+			'Online: ${Online.isConnected}',
+			'Users: ${OnlineUsers.getUserCount()}'
+		].join(' | ');
 	}
 }
