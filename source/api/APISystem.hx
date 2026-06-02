@@ -1,6 +1,5 @@
 package api;
 
-import haxe.crypto.Md5;
 import haxe.crypto.Sha256;
 import haxe.Json;
 import sys.FileSystem;
@@ -37,7 +36,7 @@ class APISystem
 		"sys.net.Socket",
 		"sys.net.Host",
 		"sys.ssl.Socket",
-		"openfl.Lib.getURL",
+		"openfl.Lib.getURL"
 	];
 
 	static final ALLOWED_MOD_FIELDS:Array<String> = [
@@ -63,26 +62,27 @@ class APISystem
 		".py", ".rb", ".pl", ".php"
 	];
 
-	static final RATE_WINDOW_MS:Float   = 1000;
-	static final MAX_CALLS_PER_SEC:Int  = 120;
-	static final BURST_LIMIT:Int        = 200;
+	static final RATE_WINDOW_MS:Float    = 1000;
+	static final MAX_CALLS_PER_SEC:Int   = 120;
+	static final BURST_LIMIT:Int         = 200;
 	static final BLOCK_DURATION_MS:Float = 5000;
-	static final LOG_PATH:String        = "logs/api.log";
-	static final SUSPICIOUS_LIMIT:Int   = 3;
+	static final LOG_PATH:String         = "logs/api.log";
+	static final SUSPICIOUS_LIMIT:Int    = 3;
+	static final NULL_BYTE:String        = String.fromCharCode(0);
 
-	public static var isInitialized:Bool = false;
+	public static var isInitialized:Bool            = false;
 	public static var onThreatDetected:String->Void = null;
 
-	private static var _callLog:Array<APILogEntry>          = [];
-	private static var _authenticatedMods:Map<String, Bool> = new Map();
-	private static var _blockedCalls:Map<String, Int>       = new Map();
+	private static var _callLog:Array<APILogEntry>           = [];
+	private static var _authenticatedMods:Map<String, Bool>  = new Map();
+	private static var _blockedCalls:Map<String, Int>        = new Map();
 	private static var _rateCounts:Map<String, Array<Float>> = new Map();
-	private static var _blockedUntil:Map<String, Float>     = new Map();
-	private static var _suspicionScore:Map<String, Int>     = new Map();
-	private static var _sessionToken:String                 = '';
-	private static var _callHistory:Array<CallRecord>       = [];
-	private static var _trustedMods:Array<String>           = [];
-	private static var _sandboxMode:Bool                    = false;
+	private static var _blockedUntil:Map<String, Float>      = new Map();
+	private static var _suspicionScore:Map<String, Int>      = new Map();
+	private static var _sessionToken:String                  = '';
+	private static var _callHistory:Array<CallRecord>        = [];
+	private static var _trustedMods:Array<String>            = [];
+	private static var _sandboxMode:Bool                     = false;
 
 	public static function init():Void
 	{
@@ -114,7 +114,6 @@ class APISystem
 		{
 			_recordBlockedCall(funcName, caller);
 			_log('Blocked call: $funcName from $caller', THREAT);
-
 			if (onThreatDetected != null)
 				onThreatDetected('Blocked dangerous call: $funcName from $caller');
 		}
@@ -214,7 +213,7 @@ class APISystem
 
 		var normalized:String = path.replace('\\', '/').toLowerCase();
 
-		if (normalized.contains('..') || normalized.contains('\0') || normalized.contains('//'))
+		if (normalized.contains('..') || normalized.contains(NULL_BYTE) || normalized.contains('//'))
 		{
 			_log('Path traversal attempt: $path', THREAT);
 			if (onThreatDetected != null) onThreatDetected('Path traversal: $path');
@@ -250,14 +249,18 @@ class APISystem
 			return { valid: false, reason: 'Input is null', sanitized: '' };
 
 		if (input.length > maxLength)
-			return { valid: false, reason: 'Input exceeds max length ($maxLength)', sanitized: input.substr(0, maxLength) };
+			return {
+				valid:     false,
+				reason:    'Input exceeds max length ($maxLength)',
+				sanitized: input.substr(0, maxLength)
+			};
 
 		var sanitized:String = input
-			.replace('<', '&lt;')
-			.replace('>', '&gt;')
-			.replace('"', '&quot;')
-			.replace("'", '&#39;')
-			.replace('\0', '');
+			.replace('<',      '&lt;')
+			.replace('>',      '&gt;')
+			.replace('"',      '&quot;')
+			.replace("'",      '&#39;')
+			.replace(NULL_BYTE, '');
 
 		for (pattern in BLOCKED_FUNCTIONS)
 			if (sanitized.contains(pattern))
@@ -342,13 +345,13 @@ class APISystem
 			if (score >= SUSPICIOUS_LIMIT) highRisk.push(id);
 
 		return {
-			threats:          threats,
-			warnings:         warnings,
-			blockedCalls:     [for (k => v in _blockedCalls) '$k: $v'],
-			highRiskCallers:  highRisk,
+			threats:           threats,
+			warnings:          warnings,
+			blockedCalls:      [for (k => v in _blockedCalls) '$k: $v'],
+			highRiskCallers:   highRisk,
 			authenticatedMods: [for (k => v in _authenticatedMods) if (v) k],
-			sandboxMode:      _sandboxMode,
-			sessionToken:     _sessionToken.substr(0, 8) + '...'
+			sandboxMode:       _sandboxMode,
+			sessionToken:      _sessionToken.substr(0, 8) + '...'
 		};
 	}
 
@@ -378,7 +381,7 @@ class APISystem
 	{
 		if (!isInitialized) return;
 
-		var argStr:String = args != null && args.length > 0
+		var argStr:String = (args != null && args.length > 0)
 			? args.map((a:Dynamic) -> Std.string(a)).join(', ')
 			: 'none';
 
@@ -398,6 +401,7 @@ class APISystem
 	private static function _validateModPack(pack:Dynamic, modDir:String):Bool
 	{
 		if (pack == null) return false;
+
 		if (Reflect.field(pack, 'name') == null)
 		{
 			_log('Mod pack missing name field: $modDir', WARNING);
