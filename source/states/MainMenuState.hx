@@ -7,10 +7,11 @@ import lime.app.Application;
 import states.editors.MasterEditorMenu;
 import options.OptionsState;
 import online.users.OnlineUsers;
+import audio.Audio;
 
 class MainMenuState extends MusicBeatState
 {
-	public static var psychEngineVersion:String = '0.1.0';
+	public static var psychEngineVersion:String = '0.1.1';
 	public static var curSelected:Int = 0;
 
 	static final OPTIONS:Array<String> = [
@@ -30,13 +31,6 @@ class MainMenuState extends MusicBeatState
 	var onlineCountBg:FlxSprite;
 	var onlineCountTxt:FlxText;
 	var onlineDot:FlxSprite;
-
-	var loginBar:FlxSprite;
-	var loginLabel:FlxText;
-	var loginUserTxt:FlxText;
-	var loginBtn:FlxSprite;
-	var loginBtnTxt:FlxText;
-	var loginBarVisible:Bool = false;
 
 	var versionTxt:FlxText;
 	var fnfVerTxt:FlxText;
@@ -88,22 +82,21 @@ class MainMenuState extends MusicBeatState
 
 		for (i in 0...OPTIONS.length)
 		{
-			var offset:Float    = 108 - (Math.max(OPTIONS.length, 4) - 4) * 80;
+			var offset:Float       = 108 - (Math.max(OPTIONS.length, 4) - 4) * 80;
 			var menuItem:FlxSprite = new FlxSprite(0, (i * 140) + offset);
-			menuItem.antialiasing = ClientPrefs.data.antialiasing;
-			menuItem.frames       = Paths.getSparrowAtlas('mainmenu/menu_' + OPTIONS[i]);
+			menuItem.antialiasing  = ClientPrefs.data.antialiasing;
+			menuItem.frames        = Paths.getSparrowAtlas('mainmenu/menu_' + OPTIONS[i]);
 			menuItem.animation.addByPrefix('idle',     OPTIONS[i] + ' basic', 24);
 			menuItem.animation.addByPrefix('selected', OPTIONS[i] + ' white', 24);
 			menuItem.animation.play('idle');
-			menuItems.add(menuItem);
 			var scr:Float = OPTIONS.length < 6 ? 0 : (OPTIONS.length - 4) * 0.135;
 			menuItem.scrollFactor.set(0, scr);
 			menuItem.updateHitbox();
 			menuItem.screenCenter(X);
+			menuItems.add(menuItem);
 		}
 
 		_buildOnlineCounter();
-		_buildLoginBar();
 		_buildVersionTexts();
 
 		changeItem();
@@ -121,11 +114,7 @@ class MainMenuState extends MusicBeatState
 		addTouchPad('UP_DOWN', 'A_B_E');
 		#end
 
-		OnlineUsers.onUsersUpdated = function(users:Array<online.users.OnlineUser>):Void
-		{
-			_updateOnlineCounter();
-		};
-
+		OnlineUsers.onUsersUpdated = function(_):Void { _updateOnlineCounter(); };
 		OnlineUsers.fetchUsers(function(_) _updateOnlineCounter(), null);
 
 		super.create();
@@ -134,53 +123,18 @@ class MainMenuState extends MusicBeatState
 
 	private function _buildOnlineCounter():Void
 	{
-		onlineCountBg = new FlxSprite(FlxG.width - 190, 10).makeGraphic(180, 36, 0xCC000000);
+		onlineCountBg = new FlxSprite(FlxG.width - 200, 8).makeGraphic(192, 38, 0xBB000000);
 		onlineCountBg.scrollFactor.set();
-		onlineCountBg.cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
 		add(onlineCountBg);
 
-		onlineDot = new FlxSprite(FlxG.width - 182, 22).makeGraphic(10, 10, 0xFF00FF00);
-		onlineDot.scrollFactor.set();
-		@:privateAccess
-		onlineDot.makeGraphic(10, 10, FlxColor.TRANSPARENT);
-		onlineDot = new FlxSprite(FlxG.width - 182, 21);
-		onlineDot.makeGraphic(10, 10, 0xFF44FF44);
+		onlineDot = new FlxSprite(FlxG.width - 188, 23).makeGraphic(8, 8, 0xFF44FF44);
 		onlineDot.scrollFactor.set();
 		add(onlineDot);
 
-		onlineCountTxt = new FlxText(FlxG.width - 170, 14, 160, '● 0 online', 14);
-		onlineCountTxt.setFormat(Paths.font('vcr.ttf'), 14, FlxColor.WHITE, RIGHT);
+		onlineCountTxt = new FlxText(FlxG.width - 178, 15, 166, '0 online', 13);
+		onlineCountTxt.setFormat(Paths.font('vcr.ttf'), 13, FlxColor.WHITE, RIGHT);
 		onlineCountTxt.scrollFactor.set();
 		add(onlineCountTxt);
-	}
-
-	private function _buildLoginBar():Void
-	{
-		loginBar = new FlxSprite(0, FlxG.height).makeGraphic(FlxG.width, 52, 0xDD111111);
-		loginBar.scrollFactor.set();
-		add(loginBar);
-
-		loginLabel = new FlxText(14, FlxG.height + 14, 0, 'ONLINE', 13);
-		loginLabel.setFormat(Paths.font('vcr.ttf'), 13, 0xFF888888, LEFT);
-		loginLabel.scrollFactor.set();
-		add(loginLabel);
-
-		loginUserTxt = new FlxText(80, FlxG.height + 14, FlxG.width - 220, '', 13);
-		loginUserTxt.setFormat(Paths.font('vcr.ttf'), 13, FlxColor.WHITE, LEFT);
-		loginUserTxt.scrollFactor.set();
-		add(loginUserTxt);
-
-		loginBtn = new FlxSprite(FlxG.width - 130, FlxG.height + 10).makeGraphic(110, 32, 0xFF2255CC);
-		loginBtn.scrollFactor.set();
-		add(loginBtn);
-
-		loginBtnTxt = new FlxText(FlxG.width - 130, FlxG.height + 17, 110, 'LOG IN', 13);
-		loginBtnTxt.setFormat(Paths.font('vcr.ttf'), 13, FlxColor.WHITE, CENTER);
-		loginBtnTxt.scrollFactor.set();
-		add(loginBtnTxt);
-
-		_refreshLoginBar();
-		_toggleLoginBar(true);
 	}
 
 	private function _buildVersionTexts():Void
@@ -196,41 +150,9 @@ class MainMenuState extends MusicBeatState
 		add(fnfVerTxt);
 	}
 
-	private function _toggleLoginBar(show:Bool):Void
-	{
-		var targetY:Float = show ? FlxG.height - 52 : FlxG.height;
-		var offset:Float  = show ? -52 : 0;
-
-		FlxTween.tween(loginBar,     {y: targetY},          0.4, {ease: FlxEase.quartOut});
-		FlxTween.tween(loginLabel,   {y: targetY + 14},     0.4, {ease: FlxEase.quartOut});
-		FlxTween.tween(loginUserTxt, {y: targetY + 14},     0.4, {ease: FlxEase.quartOut});
-		FlxTween.tween(loginBtn,     {y: targetY + 10},     0.4, {ease: FlxEase.quartOut});
-		FlxTween.tween(loginBtnTxt,  {y: targetY + 17},     0.4, {ease: FlxEase.quartOut});
-
-		loginBarVisible = show;
-	}
-
-	private function _refreshLoginBar():Void
-	{
-		if (OnlineUsers.isLoggedIn && OnlineUsers.currentUser != null)
-		{
-			loginLabel.text   = 'LOGGED IN AS';
-			loginUserTxt.text = OnlineUsers.currentUser.username.toUpperCase();
-			loginBtnTxt.text  = 'LOG OUT';
-			loginBtn.color    = 0xFFCC2222;
-		}
-		else
-		{
-			loginLabel.text   = 'ONLINE';
-			loginUserTxt.text = 'Not logged in';
-			loginBtnTxt.text  = 'LOG IN';
-			loginBtn.color    = 0xFF2255CC;
-		}
-	}
-
 	private function _updateOnlineCounter():Void
 	{
-		var count:Int     = OnlineUsers.getUserCount();
+		var count:Int      = OnlineUsers.getUserCount();
 		var quality:String = online.Online.getConnectionQuality();
 
 		var dotColor:Int = switch (quality) {
@@ -241,45 +163,9 @@ class MainMenuState extends MusicBeatState
 			default:          0xFFFF3333;
 		};
 
-		onlineDot.color         = dotColor;
-		onlineCountTxt.text     = '● $count online';
-		onlineCountTxt.color    = count > 0 ? FlxColor.WHITE : 0xFF888888;
-	}
-
-	private function _handleLoginButton():Void
-	{
-		if (!online.Online.isConnected)
-		{
-			CoolUtil.showPopUp('No internet connection.\nPlease check your connection and try again.', 'Offline');
-			return;
-		}
-
-		if (OnlineUsers.isLoggedIn)
-		{
-			OnlineUsers.logout(function():Void
-			{
-				_refreshLoginBar();
-				_updateOnlineCounter();
-			});
-		}
-		else
-		{
-			var username:String = OnlineUsers.currentUser != null
-				? OnlineUsers.currentUser.username
-				: 'Player${Std.int(Math.random() * 9999)}';
-
-			OnlineUsers.login(username,
-				function(user:online.users.OnlineUser):Void
-				{
-					_refreshLoginBar();
-					_updateOnlineCounter();
-				},
-				function(err:String):Void
-				{
-					CoolUtil.showPopUp('Login failed:\n$err', 'Error');
-				}
-			);
-		}
+		onlineDot.color      = dotColor;
+		onlineCountTxt.text  = '$count online';
+		onlineCountTxt.color = count > 0 ? FlxColor.WHITE : 0xFF888888;
 	}
 
 	private function _handleAccept():Void
@@ -339,7 +225,7 @@ class MainMenuState extends MusicBeatState
 		}
 
 		_dotPulseTimer += elapsed;
-		if (_dotPulseTimer >= 2.0)
+		if (_dotPulseTimer >= 3.0)
 		{
 			_dotPulseTimer = 0.0;
 			_updateOnlineCounter();
@@ -371,19 +257,6 @@ class MainMenuState extends MusicBeatState
 				selectedSomethin = true;
 				MusicBeatState.switchState(new MasterEditorMenu());
 			}
-
-			#if !mobile
-			if (FlxG.mouse.justPressed)
-			{
-				if (FlxG.mouse.overlaps(loginBtn))
-					_handleLoginButton();
-			}
-			#end
-
-			#if mobile
-			if (touchPad != null && touchPad.buttonB.justPressed)
-				_handleLoginButton();
-			#end
 		}
 
 		super.update(elapsed);
