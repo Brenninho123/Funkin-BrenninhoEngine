@@ -1,5 +1,6 @@
 package states.editors;
 
+import flixel.group.FlxGroup;
 import flixel.addons.transition.FlxTransitionableState;
 import objects.Character;
 import objects.BGSprite;
