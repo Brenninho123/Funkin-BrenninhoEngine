@@ -48,42 +48,42 @@ class Character extends FlxSprite
 	public var debugMode:Bool = false;
 	public var extraData:Map<String, Dynamic> = new Map();
 
-	public var isPlayer:Bool = false;
+	public var isPlayer:Bool       = false;
 	public var curCharacter:String = DEFAULT_CHARACTER;
 
-	public var holdTimer:Float     = 0;
-	public var heyTimer:Float      = 0;
-	public var specialAnim:Bool    = false;
+	public var holdTimer:Float    = 0;
+	public var heyTimer:Float     = 0;
+	public var specialAnim:Bool   = false;
 	public var animationNotes:Array<Dynamic> = [];
-	public var stunned:Bool        = false;
-	public var singDuration:Float  = 4;
-	public var idleSuffix:String   = '';
-	public var danceIdle:Bool      = false;
-	public var skipDance:Bool      = false;
+	public var stunned:Bool       = false;
+	public var singDuration:Float = 4;
+	public var idleSuffix:String  = '';
+	public var danceIdle:Bool     = false;
+	public var skipDance:Bool     = false;
 
-	public var healthIcon:String        = 'face';
+	public var healthIcon:String              = 'face';
 	public var animationsArray:Array<AnimArray> = [];
-	public var positionArray:Array<Float>   = [0, 0];
-	public var cameraPosition:Array<Float>  = [0, 0];
-	public var healthColorArray:Array<Int>  = [255, 0, 0];
+	public var positionArray:Array<Float>     = [0, 0];
+	public var cameraPosition:Array<Float>    = [0, 0];
+	public var healthColorArray:Array<Int>    = [255, 0, 0];
 
 	public var hasMissAnimations:Bool = false;
 	public var vocalsFile:String      = '';
 
-	public var imageFile:String        = '';
-	public var jsonScale:Float         = 1;
-	public var noAntialiasing:Bool     = false;
-	public var originalFlipX:Bool      = false;
+	public var imageFile:String          = '';
+	public var jsonScale:Float           = 1;
+	public var noAntialiasing:Bool       = false;
+	public var originalFlipX:Bool        = false;
 	public var editorIsPlayer:Null<Bool> = null;
-	public var isCodenameChar:Bool     = false;
+	public var isCodenameChar:Bool       = false;
 
 	public function new(x:Float, y:Float, ?character:String = 'bf', ?isPlayer:Bool = false)
 	{
 		super(x, y);
 
-		animation    = new PsychAnimationController(this);
-		animOffsets  = new Map();
-		curCharacter = character;
+		animation     = new PsychAnimationController(this);
+		animOffsets   = new Map();
+		curCharacter  = character;
 		this.isPlayer = isPlayer;
 
 		switch (curCharacter)
@@ -125,7 +125,7 @@ class Character extends FlxSprite
 			isCodenameChar = true;
 
 			var characterPath:String = 'characters/$character.json';
-			var jsonPath:String = Paths.getPath(characterPath, TEXT, null, true);
+			var jsonPath:String      = Paths.getPath(characterPath, TEXT, null, true);
 
 			var hasJson:Bool = false;
 			#if MODS_ALLOWED
@@ -144,9 +144,8 @@ class Character extends FlxSprite
 			}
 			else
 			{
-				frames = Paths.getAtlas(data.sprite);
-				imageFile = data.sprite;
-
+				frames           = Paths.getAtlas(data.sprite);
+				imageFile        = data.sprite;
 				positionArray    = [data.x, data.y];
 				cameraPosition   = [0, 0];
 				healthIcon       = data.icon;
@@ -179,7 +178,7 @@ class Character extends FlxSprite
 	private function _loadJson(character:String):Void
 	{
 		var characterPath:String = 'characters/$character.json';
-		var path:String = Paths.getPath(characterPath, TEXT, null, true);
+		var path:String          = Paths.getPath(characterPath, TEXT, null, true);
 
 		#if MODS_ALLOWED
 		if (!FileSystem.exists(path))
@@ -224,15 +223,15 @@ class Character extends FlxSprite
 		#if flxanimate
 		else
 		{
-			atlas = new FlxAnimate();
+			atlas           = new FlxAnimate();
 			atlas.showPivot = false;
 			try { Paths.loadAnimateAtlas(atlas, json.image); }
 			catch (e:Dynamic) { FlxG.log.warn('Could not load atlas ${json.image}: $e'); }
 		}
 		#end
 
-		imageFile      = json.image;
-		jsonScale      = json.scale;
+		imageFile  = json.image;
+		jsonScale  = json.scale;
 		if (json.scale != 1) { scale.set(jsonScale, jsonScale); updateHitbox(); }
 
 		positionArray    = json.position;
@@ -428,7 +427,7 @@ class Character extends FlxSprite
 
 		if (curCharacter.startsWith('gf-') || curCharacter == 'gf')
 		{
-			if (AnimName == 'singLEFT')       danced = true;
+			if      (AnimName == 'singLEFT')  danced = true;
 			else if (AnimName == 'singRIGHT') danced = false;
 			if (AnimName == 'singUP' || AnimName == 'singDOWN') danced = !danced;
 		}
@@ -498,22 +497,22 @@ class Character extends FlxSprite
 	{
 		@:privateAccess
 		{
-			atlas.cameras       = cameras;
-			atlas.scrollFactor  = scrollFactor;
-			atlas.scale         = scale;
-			atlas.offset        = offset;
-			atlas.origin        = origin;
-			atlas.x             = x;
-			atlas.y             = y;
-			atlas.angle         = angle;
-			atlas.alpha         = alpha;
-			atlas.visible       = visible;
-			atlas.flipX         = flipX;
-			atlas.flipY         = flipY;
-			atlas.shader        = shader;
-			atlas.antialiasing  = antialiasing;
+			atlas.cameras        = cameras;
+			atlas.scrollFactor   = scrollFactor;
+			atlas.scale          = scale;
+			atlas.offset         = offset;
+			atlas.origin         = origin;
+			atlas.x              = x;
+			atlas.y              = y;
+			atlas.angle          = angle;
+			atlas.alpha          = alpha;
+			atlas.visible        = visible;
+			atlas.flipX          = flipX;
+			atlas.flipY          = flipY;
+			atlas.shader         = shader;
+			atlas.antialiasing   = antialiasing;
 			atlas.colorTransform = colorTransform;
-			atlas.color         = color;
+			atlas.color          = color;
 		}
 	}
 
