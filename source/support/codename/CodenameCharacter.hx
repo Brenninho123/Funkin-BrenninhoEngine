@@ -30,17 +30,15 @@ class CodenameCharacter
 	{
 		#if sys
 		if (!sys.FileSystem.exists(xmlPath)) return null;
-
 		try
 		{
-			var content:String  = sys.io.File.getContent(xmlPath);
+			var content:String = sys.io.File.getContent(xmlPath);
 			return parse(content);
 		}
 		catch (e:Dynamic) { return null; }
 		#else
 		var content:String = openfl.Assets.getText(xmlPath);
 		if (content == null) return null;
-
 		try { return parse(content); }
 		catch (e:Dynamic) { return null; }
 		#end
@@ -60,28 +58,26 @@ class CodenameCharacter
 
 		cleaned = cleaned.trim();
 
-		var root:Xml = Xml.parse(cleaned);
+		var root:Xml    = Xml.parse(cleaned);
 		var charNode:Xml = null;
 
 		for (node in root)
-		{
 			if (node.nodeType == Xml.Element && node.nodeName == 'character')
 			{
 				charNode = node;
 				break;
 			}
-		}
 
 		if (charNode == null) return null;
 
 		var data:CodenameCharacterData = {
-			sprite:   charNode.exists('sprite')   ? charNode.get('sprite')   : '',
-			flipX:    charNode.exists('flipX')     ? charNode.get('flipX') == 'true' : false,
-			isPlayer: charNode.exists('isPlayer')  ? charNode.get('isPlayer') == 'true' : false,
-			icon:     charNode.exists('icon')      ? charNode.get('icon')     : '',
-			color:    charNode.exists('color')     ? charNode.get('color')    : '#FFFFFF',
-			x:        charNode.exists('x')         ? Std.parseInt(charNode.get('x')) : 0,
-			y:        charNode.exists('y')         ? Std.parseInt(charNode.get('y')) : 0,
+			sprite:   charNode.exists('sprite')   ? charNode.get('sprite')            : '',
+			flipX:    charNode.exists('flipX')     ? charNode.get('flipX') == 'true'   : false,
+			isPlayer: charNode.exists('isPlayer')  ? charNode.get('isPlayer') == 'true': false,
+			icon:     charNode.exists('icon')      ? charNode.get('icon')              : '',
+			color:    charNode.exists('color')     ? charNode.get('color')             : '#FFFFFF',
+			x:        charNode.exists('x')         ? Std.parseInt(charNode.get('x'))   : 0,
+			y:        charNode.exists('y')         ? Std.parseInt(charNode.get('y'))   : 0,
 			anims:    []
 		};
 
@@ -107,14 +103,13 @@ class CodenameCharacter
 
 	public static function toCharacterJson(data:CodenameCharacterData):Dynamic
 	{
-		var animations:Array<Dynamic> = data.anims.map((a:CodenameAnimData) ->
-		{
-			anim:      a.anim,
-			name:      a.name,
-			fps:       a.fps,
-			loop:      a.loop,
-			offsets:   [a.x, a.y],
-			indices:   []
+		var animations:Array<Dynamic> = data.anims.map((a:CodenameAnimData) -> {
+			anim:    a.anim,
+			name:    a.name,
+			fps:     a.fps,
+			loop:    a.loop,
+			offsets: [a.x, a.y],
+			indices: []
 		});
 
 		return {
@@ -123,7 +118,7 @@ class CodenameCharacter
 			scale:         1.0,
 			singDuration:  4.0,
 			healthIcon:    data.icon,
-			healthColor:   _hexToArray(data.color),
+			healthColor:   hexToArray(data.color),
 			positionArray: [data.x, data.y],
 			cameraPosition:[0, 0],
 			flipX:         data.flipX,
@@ -143,7 +138,6 @@ class CodenameCharacter
 		}
 
 		if (data.flipX) char.flipX = !char.flipX;
-
 		char.x += data.x;
 		char.y += data.y;
 	}
@@ -205,7 +199,7 @@ class CodenameCharacter
 		return null;
 	}
 
-	private static function _hexToArray(hex:String):Array<Int>
+	public static function hexToArray(hex:String):Array<Int>
 	{
 		hex = hex.replace('#', '');
 		if (hex.length == 3)
