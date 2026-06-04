@@ -2,7 +2,7 @@
 
 A Fork For Psych Engine 0.7.3 But Simple
 
-![special](docs/img/special.png)
+![special](art/iconOG.png)
 
 ## Customization:
 
