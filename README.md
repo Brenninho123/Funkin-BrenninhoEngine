@@ -1,6 +1,6 @@
 # Friday Night Funkin' - Brenninho Engine
 
-A Fork For Psych Engine 0.7.3 But Simple
+A Fork For Psych Engine 0.7.3 But Simple and Online Support, with improvements to Lua itself and to HScript itself as well.
 
 ![special](art/iconOG.png)
 
