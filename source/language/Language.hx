@@ -15,7 +15,7 @@ class Language
 {
 	static final FALLBACK_CODE:String    = 'en-US';
 	static final SAVE_KEY:String         = 'language';
-	static final STRINGS_PATH:String     = 'assets/data/languages/';
+	static final STRINGS_PATH:String = 'assets/languages/';
 
 	public static var current(default, null):LanguageData  = null;
 	public static var fallback(default, null):LanguageData = null;
