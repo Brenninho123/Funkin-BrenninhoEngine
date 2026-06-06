@@ -13,9 +13,18 @@ import openfl.system.System as OpenFlSystem;
 #include <windows.h>
 #include <psapi.h>
 ')
-#elseif (ios || mac)
-@:cppFileCode('#include <mach-o/arch.h>')
-@:cppFileCode('#include <sys/sysctl.h>')
+#elseif ios
+@:cppFileCode('
+#include <mach-o/arch.h>
+#include <sys/types.h>
+#include <sys/sysctl.h>
+')
+#elseif mac
+@:cppFileCode('
+#include <mach-o/arch.h>
+#include <sys/types.h>
+#include <sys/sysctl.h>
+')
 #else
 @:headerInclude('sys/utsname.h')
 @:headerInclude('sys/sysinfo.h')
