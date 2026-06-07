@@ -9,10 +9,17 @@ import options.OptionsState;
 import online.users.OnlineUsers;
 import audio.Audio;
 
+#if LUA_ALLOWED
+import psychlua.FunkinLua;
+#end
+#if HSCRIPT_ALLOWED
+import scripting.HScript;
+#end
+
 class MainMenuState extends MusicBeatState
 {
 	public static var psychEngineVersion:String = '0.1.1';
-	public static var curSelected:Int = 0;
+	public static var curSelected:Int           = 0;
 
 	static final OPTIONS:Array<String> = [
 		'story_mode',
@@ -38,6 +45,13 @@ class MainMenuState extends MusicBeatState
 	var selectedSomethin:Bool = false;
 	var _dotPulseTimer:Float  = 0.0;
 
+	#if LUA_ALLOWED
+	private var _luaScript:Null<FunkinLua> = null;
+	#end
+	#if HSCRIPT_ALLOWED
+	private var _hxScript:Null<HScript>    = null;
+	#end
+
 	override function create():Void
 	{
 		#if MODS_ALLOWED
@@ -57,7 +71,7 @@ class MainMenuState extends MusicBeatState
 		var yScroll:Float = Math.max(0.25 - (0.05 * (OPTIONS.length - 4)), 0.1);
 
 		var bg:FlxSprite = new FlxSprite(-80).loadGraphic(Paths.image('menuBG'));
-		bg.antialiasing = ClientPrefs.data.antialiasing;
+		bg.antialiasing  = ClientPrefs.data.antialiasing;
 		bg.scrollFactor.set(0, yScroll);
 		bg.setGraphicSize(Std.int(bg.width * 1.175));
 		bg.updateHitbox();
@@ -117,8 +131,72 @@ class MainMenuState extends MusicBeatState
 		OnlineUsers.onUsersUpdated = function(_):Void { _updateOnlineCounter(); };
 		OnlineUsers.fetchUsers(function(_) _updateOnlineCounter(), null);
 
+		_loadStateScripts();
+
 		super.create();
 		FlxG.camera.follow(camFollow, null, 9);
+
+		_callScript('onCreate');
+	}
+
+	private function _loadStateScripts():Void
+	{
+		#if MODS_ALLOWED
+		var scriptPath:Null<String> = Mods.getStateScript('MainMenuState');
+		if (scriptPath == null) return;
+
+		#if LUA_ALLOWED
+		if (scriptPath.endsWith('.lua'))
+		{
+			_luaScript = new FunkinLua(scriptPath);
+			_luaScript.set('curSelected',    curSelected);
+			_luaScript.set('optionCount',    OPTIONS.length);
+			_luaScript.set('engineVersion',  psychEngineVersion);
+			return;
+		}
+		#end
+
+		#if HSCRIPT_ALLOWED
+		if (scriptPath.endsWith('.hx'))
+		{
+			_hxScript = new HScript(scriptPath);
+			_hxScript.set('curSelected',   curSelected);
+			_hxScript.set('optionCount',   OPTIONS.length);
+			_hxScript.set('engineVersion', psychEngineVersion);
+			_hxScript.set('state',         this);
+			return;
+		}
+		#end
+		#end
+	}
+
+	private function _callScript(func:String, ?args:Array<Dynamic>):Dynamic
+	{
+		if (args == null) args = [];
+
+		#if LUA_ALLOWED
+		if (_luaScript != null)
+		{
+			var result = _luaScript.call(func, args);
+			if (result == FunkinLua.FUNCTION_STOP) return result;
+		}
+		#end
+
+		#if HSCRIPT_ALLOWED
+		if (_hxScript != null)
+		{
+			try { return _hxScript.call(func, args); }
+			catch (e:Dynamic) {}
+		}
+		#end
+
+		return null;
+	}
+
+	private function _callScriptWithReturn(func:String, ?args:Array<Dynamic>, defaultValue:Dynamic = null):Dynamic
+	{
+		var result = _callScript(func, args);
+		return result != null ? result : defaultValue;
 	}
 
 	private function _buildOnlineCounter():Void
@@ -155,7 +233,8 @@ class MainMenuState extends MusicBeatState
 		var count:Int      = OnlineUsers.getUserCount();
 		var quality:String = online.Online.getConnectionQuality();
 
-		var dotColor:Int = switch (quality) {
+		var dotColor:Int = switch (quality)
+		{
 			case 'Excellent': 0xFF44FF44;
 			case 'Good':      0xFF88FF44;
 			case 'Fair':      0xFFFFCC00;
@@ -163,13 +242,16 @@ class MainMenuState extends MusicBeatState
 			default:          0xFFFF3333;
 		};
 
-		onlineDot.color      = dotColor;
-		onlineCountTxt.text  = '$count online';
+		onlineDot.color     = dotColor;
+		onlineCountTxt.text = '$count online';
 		onlineCountTxt.color = count > 0 ? FlxColor.WHITE : 0xFF888888;
 	}
 
 	private function _handleAccept():Void
 	{
+		if (_callScript('onAccept', [OPTIONS[curSelected]]) == #if LUA_ALLOWED FunkinLua.FUNCTION_STOP #else 'stop' #end)
+			return;
+
 		FlxG.sound.play(Paths.sound('confirmMenu'));
 
 		if (OPTIONS[curSelected] == 'donate')
@@ -185,6 +267,8 @@ class MainMenuState extends MusicBeatState
 
 		FlxFlicker.flicker(menuItems.members[curSelected], 1, 0.06, false, false, function(_:FlxFlicker):Void
 		{
+			_callScript('onStateSwitch', [OPTIONS[curSelected]]);
+
 			switch (OPTIONS[curSelected])
 			{
 				case 'story_mode': MusicBeatState.switchState(new StoryMenuState());
@@ -200,7 +284,7 @@ class MainMenuState extends MusicBeatState
 					{
 						PlayState.SONG.arrowSkin  = null;
 						PlayState.SONG.splashSkin = null;
-						PlayState.stageUI = 'normal';
+						PlayState.stageUI         = 'normal';
 					}
 			}
 		});
@@ -233,16 +317,29 @@ class MainMenuState extends MusicBeatState
 
 		OnlineUsers.update(elapsed);
 
+		_callScript('onUpdate', [elapsed]);
+
 		if (!selectedSomethin)
 		{
-			if (controls.UI_UP_P)   changeItem(-1);
-			if (controls.UI_DOWN_P) changeItem(1);
+			if (controls.UI_UP_P)
+			{
+				if (_callScript('onUp') != #if LUA_ALLOWED FunkinLua.FUNCTION_STOP #else 'stop' #end)
+					changeItem(-1);
+			}
+			if (controls.UI_DOWN_P)
+			{
+				if (_callScript('onDown') != #if LUA_ALLOWED FunkinLua.FUNCTION_STOP #else 'stop' #end)
+					changeItem(1);
+			}
 
 			if (controls.BACK)
 			{
-				selectedSomethin = true;
-				FlxG.sound.play(Paths.sound('cancelMenu'));
-				MusicBeatState.switchState(new TitleState());
+				if (_callScript('onBack') != #if LUA_ALLOWED FunkinLua.FUNCTION_STOP #else 'stop' #end)
+				{
+					selectedSomethin = true;
+					FlxG.sound.play(Paths.sound('cancelMenu'));
+					MusicBeatState.switchState(new TitleState());
+				}
 			}
 
 			if (controls.ACCEPT)
@@ -260,6 +357,30 @@ class MainMenuState extends MusicBeatState
 		}
 
 		super.update(elapsed);
+		_callScript('onUpdatePost', [elapsed]);
+	}
+
+	override function destroy():Void
+	{
+		_callScript('onDestroy');
+
+		#if LUA_ALLOWED
+		if (_luaScript != null)
+		{
+			_luaScript.stop();
+			_luaScript = null;
+		}
+		#end
+
+		#if HSCRIPT_ALLOWED
+		if (_hxScript != null)
+		{
+			_hxScript.stop();
+			_hxScript = null;
+		}
+		#end
+
+		super.destroy();
 	}
 
 	function changeItem(huh:Int = 0):Void
@@ -279,5 +400,14 @@ class MainMenuState extends MusicBeatState
 			menuItems.members[curSelected].getGraphicMidpoint().x,
 			menuItems.members[curSelected].getGraphicMidpoint().y - (OPTIONS.length > 4 ? OPTIONS.length * 8 : 0)
 		);
+
+		_callScript('onChangeItem', [curSelected, OPTIONS[curSelected]]);
+
+		#if LUA_ALLOWED
+		if (_luaScript != null) _luaScript.set('curSelected', curSelected);
+		#end
+		#if HSCRIPT_ALLOWED
+		if (_hxScript != null) _hxScript.set('curSelected', curSelected);
+		#end
 	}
 }
