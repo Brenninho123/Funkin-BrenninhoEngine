@@ -1,44 +1,83 @@
 name: Main
-on: workflow_dispatch
 
-# permissions: write-all
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Targets to build (comma-separated: Windows,Linux,MacOS,Android,iOS) or "all"'
+        required: false
+        default: 'all'
+      release_tag:
+        description: 'Release tag (leave empty to skip release creation)'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  Build:
-    name: ${{ matrix.name }}
-    strategy:
-      matrix:
-        include:
-          - name: Windows
-            os: windows-2022
-            buildArgs: windows
-            artifactName: Windows
-            artifactPath: export\release\windows\bin\*
+  prepare:
+    name: Prepare Build Matrix
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Build matrix
+        id: set-matrix
+        run: |
+          INPUT="${{ github.event.inputs.targets }}"
+          ALL='[
+            {"name":"Windows","os":"windows-2022","buildArgs":"windows","artifactName":"Windows","artifactPath":"export/release/windows/bin/*"},
+            {"name":"Linux","os":"ubuntu-22.04","buildArgs":"linux","artifactName":"Linux","artifactPath":"export/release/linux/bin/*"},
+            {"name":"MacOS","os":"macos-15","buildArgs":"mac","artifactName":"MacOS","artifactPath":"export/release/macos/bin/*"},
+            {"name":"Android","os":"macos-15","buildArgs":"android -ONLY_ARM64","artifactName":"Android","artifactPath":"export/release/android/bin/app/build/outputs/apk/release/*.apk"},
+            {"name":"iOS","os":"macos-15","buildArgs":"ios -nosign","artifactName":"IOS","artifactPath":"export/release/ios/build/Release-iphoneos/*.ipa"}
+          ]'
+          if [ "$INPUT" = "all" ] || [ -z "$INPUT" ]; then
+            echo "matrix={\"include\":$(echo $ALL | jq -c '.')}" >> $GITHUB_OUTPUT
+          else
+            FILTERED=$(echo $ALL | jq -c --arg targets "$INPUT" '
+              [.[] | select(.name as $n | ($targets | split(",") | map(ltrimstr(" ") | rtrimstr(" ")) | index($n)) != null)]
+            ')
+            echo "matrix={\"include\":$FILTERED}" >> $GITHUB_OUTPUT
+          fi
 
-          - name: Linux
-            os: ubuntu-22.04
-            buildArgs: linux
-            artifactName: Linux
-            artifactPath: export/release/linux/bin/*
-          - name: MacOS
-            os: macos-15
-            buildArgs: mac
-            artifactName: MacOS
-            artifactPath: export/release/macos/bin/*
-          - name: Android
-            os: macos-15
-            buildArgs: "android -ONLY_ARM64"
-            artifactName: Android
-            artifactPath: "export/release/android/bin/app/build/outputs/apk/release/*.apk"
-          - name: iOS
-            os: macos-15
-            buildArgs: "ios -nosign"
-            artifactName: IOS
-            artifactPath: "export/release/ios/build/Release-iphoneos/*.ipa"
+  build:
+    name: ${{ matrix.name }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     uses: ./.github/workflows/build.yml
     with:
-        name: ${{ matrix.name }}
-        os: ${{ matrix.os }}
-        buildArgs: ${{ matrix.buildArgs }}
-        artifactName: ${{ matrix.artifactName }}
-        artifactPath: ${{ matrix.artifactPath }}
+      name:         ${{ matrix.name }}
+      os:           ${{ matrix.os }}
+      buildArgs:    ${{ matrix.buildArgs }}
+      artifactName: ${{ matrix.artifactName }}
+      artifactPath: ${{ matrix.artifactPath }}
+    secrets: inherit
+
+  release:
+    name: Create Release
+    needs: build
+    if: ${{ github.event.inputs.release_tag != '' }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ github.event.inputs.release_tag }}
+          name:       BrenninhoEngine ${{ github.event.inputs.release_tag }}
+          draft:      false
+          prerelease: false
+          files:      artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
