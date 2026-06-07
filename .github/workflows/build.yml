@@ -18,58 +18,78 @@ on:
       artifactPath:
         required: true
         type: string
+    secrets:
+      KEYSTORE_BASE64:
+        required: false
+      KEYSTORE_PASSWORD:
+        required: false
+      KEYSTORE_ALIAS:
+        required: false
+      KEYSTORE_ALIAS_PASSWORD:
+        required: false
+      GOOGLE_PLAY_JSON:
+        required: false
 
 env:
-  HAXE_VERSION: 4.3.7
-  PROJECT_NAME: BrenninhoEngine
+  HAXE_VERSION:   4.3.7
+  PROJECT_NAME:   BrenninhoEngine
+  PACKAGE_NAME:   com.funkin.brenninhoengine
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
   build:
     name: Build
     runs-on: ${{ inputs.os }}
+    timeout-minutes: 90
+
     steps:
       - name: Checkout
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Setup Haxe
+      - name: Setup Haxe (attempt 1)
+        id: haxe_1
         uses: krdlab/setup-haxe@master
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
+        continue-on-error: true
+
+      - name: Setup Haxe (retry)
+        if: steps.haxe_1.outcome == 'failure'
+        uses: krdlab/setup-haxe@master
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+
+      - name: Verify Haxe
+        run: haxe --version
 
       - name: Cache Haxelib
         uses: actions/cache@v4
         with:
           path: ~/.haxelib
           key: haxelib-${{ inputs.name }}-${{ hashFiles('hmm.json') }}
-          restore-keys: |
-            haxelib-${{ inputs.name }}-
+          restore-keys: haxelib-${{ inputs.name }}-
 
-      - name: Cache Haxe Compiler
-        uses: actions/cache@v4
-        with:
-          path: .haxe-cache
-          key: haxe-compiler-${{ inputs.name }}-${{ hashFiles('source/**/*.hx') }}
-          restore-keys: |
-            haxe-compiler-${{ inputs.name }}-
-
-      - name: Cache HXCPP Build
+      - name: Cache HXCPP
         uses: actions/cache@v4
         with:
           path: |
             export/release/cpp
             export/debug/cpp
+            ~/.hxcpp-cache
           key: hxcpp-${{ inputs.name }}-${{ hashFiles('source/**/*.hx', 'Project.xml') }}
-          restore-keys: |
-            hxcpp-${{ inputs.name }}-
+          restore-keys: hxcpp-${{ inputs.name }}-
 
       - name: Install libVLC
         if: inputs.name == 'Linux'
-        run: sudo apt-get install -y libvlc-dev libvlccore-dev
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libvlc-dev libvlccore-dev
 
       - name: Setup Xcode
         if: inputs.name == 'iOS'
-        uses: maxim-lobanov/setup-xcode@master
+        uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '16.4'
 
@@ -78,33 +98,190 @@ jobs:
           haxelib install hmm --quiet
           haxelib run hmm install --quiet
 
+      - name: Set Compiler Threads
+        shell: bash
+        run: |
+          if   [ "${{ inputs.name }}" = "Linux"   ]; then CPUS=$(nproc)
+          elif [ "${{ inputs.name }}" = "Windows"  ]; then CPUS=$NUMBER_OF_PROCESSORS
+          else                                              CPUS=$(sysctl -n hw.logicalcpu)
+          fi
+          echo "CPUS=$CPUS" >> $GITHUB_ENV
+
       - name: Accept Android SDK Licenses
         if: inputs.name == 'Android'
         run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
-      - name: Configure Android
+      - name: Configure Android SDK
         if: inputs.name == 'Android'
         run: |
-          haxelib run lime config ANDROID_SDK $ANDROID_HOME
-          haxelib run lime config ANDROID_NDK_ROOT $ANDROID_NDK_LATEST_HOME
-          haxelib run lime config JAVA_HOME $JAVA_HOME_17_arm64
-          haxelib run lime config ANDROID_SETUP true
+          haxelib run lime config ANDROID_SDK       $ANDROID_HOME
+          haxelib run lime config ANDROID_NDK_ROOT  $ANDROID_NDK_LATEST_HOME
+          haxelib run lime config JAVA_HOME         $JAVA_HOME_17_arm64
+          haxelib run lime config ANDROID_SETUP     true
 
-      - name: Set Compiler Threads
+      - name: Validate Android Environment
+        if: inputs.name == 'Android'
         shell: bash
         run: |
-          if [ "${{ inputs.name }}" = "Linux" ]; then
-            CPUS=$(nproc)
-          elif [ "${{ inputs.name }}" = "Windows" ]; then
-            CPUS=$NUMBER_OF_PROCESSORS
-          else
-            CPUS=$(sysctl -n hw.logicalcpu)
+          echo "=== Android SDK ==="
+          echo "SDK:  $ANDROID_HOME"
+          echo "NDK:  $ANDROID_NDK_LATEST_HOME"
+          echo "Java: $JAVA_HOME_17_arm64"
+
+          java -version
+
+          BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
+          echo "Build Tools: $BUILD_TOOLS"
+          echo "ANDROID_BUILD_TOOLS=$BUILD_TOOLS" >> $GITHUB_ENV
+
+          NDK_VER=$(basename $ANDROID_NDK_LATEST_HOME)
+          echo "NDK Version: $NDK_VER"
+          echo "ANDROID_NDK_VERSION=$NDK_VER" >> $GITHUB_ENV
+
+          if [ ! -f "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" ]; then
+            echo "ERROR: aapt not found in build-tools"
+            exit 1
           fi
-          echo "CPUS=$CPUS" >> $GITHUB_ENV
-          echo "Using $CPUS threads for compilation"
+
+          echo "Environment OK"
+
+      - name: Setup Android Keystore
+        if: inputs.name == 'Android' && secrets.KEYSTORE_BASE64 != ''
+        shell: bash
+        env:
+          KEYSTORE_BASE64:       ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD:     ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS:        ${{ secrets.KEYSTORE_ALIAS }}
+          KEYSTORE_ALIAS_PASSWORD: ${{ secrets.KEYSTORE_ALIAS_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > key.keystore
+          echo "KEYSTORE_PATH=$(pwd)/key.keystore" >> $GITHUB_ENV
+
+          keytool -list -v \
+            -keystore key.keystore \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -alias "$KEYSTORE_ALIAS" 2>&1 | grep -E "Alias|Valid|SHA"
+
+          echo "Keystore OK"
 
       - name: Compile
-        run: haxelib run lime build ${{ inputs.buildArgs }} -DHXCPP_COMPILE_THREADS=${{ env.CPUS }} -DHXCPP_OPTIMIZE_FOR_CPUID=1
+        run: |
+          haxelib run lime build ${{ inputs.buildArgs }} \
+            -DHXCPP_COMPILE_THREADS=${{ env.CPUS }} \
+            -DHXCPP_OPTIMIZE_FOR_CPUID=1
+
+      - name: Verify APK
+        if: inputs.name == 'Android'
+        shell: bash
+        run: |
+          APK=$(find export/release/android -name "*.apk" | head -1)
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK not found"
+            exit 1
+          fi
+          echo "APK_PATH=$APK" >> $GITHUB_ENV
+          echo "APK found: $APK"
+
+          AAPT="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}/aapt"
+
+          echo "=== APK Info ==="
+          $AAPT dump badging "$APK" | grep -E "package|versionCode|versionName|sdkVersion|targetSdkVersion|native-code"
+
+          PACKAGE=$($AAPT dump badging "$APK" | grep "^package" | sed "s/.*name='//;s/'.*//")
+          if [ "$PACKAGE" != "${{ env.PACKAGE_NAME }}" ]; then
+            echo "ERROR: Package mismatch. Expected ${{ env.PACKAGE_NAME }}, got $PACKAGE"
+            exit 1
+          fi
+
+          echo "=== APK Size ==="
+          du -sh "$APK"
+          APK_SIZE=$(du -m "$APK" | cut -f1)
+          echo "APK_SIZE_MB=$APK_SIZE" >> $GITHUB_ENV
+
+          if [ "$APK_SIZE" -lt 5 ]; then
+            echo "ERROR: APK suspiciously small (${APK_SIZE}MB)"
+            exit 1
+          fi
+
+          echo "=== APK Permissions ==="
+          $AAPT dump permissions "$APK"
+
+          echo "=== APK Native Libraries ==="
+          $AAPT dump badging "$APK" | grep "native-code" || echo "No native libs listed in badging"
+
+          echo "APK OK"
+
+      - name: Verify APK Signature
+        if: inputs.name == 'Android' && env.KEYSTORE_PATH != ''
+        shell: bash
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS:    ${{ secrets.KEYSTORE_ALIAS }}
+        run: |
+          APKSIGNER="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}/apksigner"
+
+          echo "=== Signature Verification ==="
+          $APKSIGNER verify --verbose "${{ env.APK_PATH }}" 2>&1
+
+          echo "=== Signer Info ==="
+          $APKSIGNER verify --print-certs "${{ env.APK_PATH }}" 2>&1 | grep -E "Signer|DN|SHA"
+
+          echo "Signature OK"
+
+      - name: Google Play Pre-flight Check
+        if: inputs.name == 'Android' && secrets.GOOGLE_PLAY_JSON != ''
+        shell: bash
+        run: |
+          pip install google-auth google-auth-httplib2 google-api-python-client --quiet
+
+          cat > /tmp/gp_check.py << 'PYTHON'
+          import json, sys, os
+          from google.oauth2 import service_account
+          from googleapiclient.discovery import build
+
+          KEY_FILE    = '/tmp/gp_key.json'
+          PACKAGE     = os.environ['PACKAGE_NAME']
+          APK_PATH    = os.environ['APK_PATH']
+
+          with open(KEY_FILE) as f:
+              key = json.load(f)
+
+          creds = service_account.Credentials.from_service_account_info(
+              key, scopes=['https://www.googleapis.com/auth/androidpublisher'])
+
+          service = build('androidpublisher', 'v3', credentials=creds)
+          edits   = service.edits()
+
+          edit = edits.insert(packageName=PACKAGE, body={}).execute()
+          edit_id = edit['id']
+
+          try:
+              details = edits.details().get(packageName=PACKAGE, editId=edit_id).execute()
+              print(f"App title:         {details.get('title', 'N/A')}")
+              print(f"Default language:  {details.get('defaultLanguage', 'N/A')}")
+          except Exception as e:
+              print(f"Details fetch failed (non-fatal): {e}")
+
+          try:
+              tracks = edits.tracks().list(packageName=PACKAGE, editId=edit_id).execute()
+              for track in tracks.get('tracks', []):
+                  name    = track.get('track')
+                  releases = track.get('releases', [])
+                  if releases:
+                      latest = releases[-1]
+                      status = latest.get('status')
+                      codes  = latest.get('versionCodes', [])
+                      print(f"Track {name}: status={status} versionCodes={codes}")
+          except Exception as e:
+              print(f"Tracks fetch failed (non-fatal): {e}")
+
+          edits.delete(packageName=PACKAGE, editId=edit_id).execute()
+          print("Google Play pre-flight OK")
+          PYTHON
+
+          echo '${{ secrets.GOOGLE_PLAY_JSON }}' > /tmp/gp_key.json
+          PACKAGE_NAME=${{ env.PACKAGE_NAME }} APK_PATH=${{ env.APK_PATH }} python3 /tmp/gp_check.py
+          rm -f /tmp/gp_key.json
 
       - name: Make IPA
         if: inputs.name == 'iOS'
@@ -114,16 +291,33 @@ jobs:
           mv *.app Payload
           zip -r ${{ env.PROJECT_NAME }}.ipa Payload
 
+      - name: Build Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "### Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | ${{ inputs.name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Haxe | ${{ env.HAXE_VERSION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Threads | ${{ env.CPUS }} |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.name }}" = "Android" ]; then
+            echo "| NDK | ${{ env.ANDROID_NDK_VERSION }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Build Tools | ${{ env.ANDROID_BUILD_TOOLS }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| APK Size | ${{ env.APK_SIZE_MB }}MB |" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Upload Artifact
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifactName }}
           path: ${{ inputs.artifactPath }}
           if-no-files-found: error
+          compression-level: 6
 
       - name: Upload Build Logs on Failure
         if: failure()
-        uses: actions/upload-artifact@main
+        uses: actions/upload-artifact@v4
         with:
           name: build-logs-${{ inputs.name }}
           path: |
