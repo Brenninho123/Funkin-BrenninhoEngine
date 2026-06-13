@@ -18,9 +18,6 @@ on:
       artifactPath:
         required: true
         type: string
-    secrets:
-      GOOGLE_PLAY_JSON:
-        required: false
 
 env:
   HAXE_VERSION: 4.3.7
@@ -132,7 +129,7 @@ jobs:
           fi
 
           echo "SDK:         $ANDROID_HOME"
-          echo "NDK:         $ANDROID_NDK_LATEST_HOME ($NDK_VER)"
+          echo "NDK:         $NDK_VER"
           echo "Build Tools: $BUILD_TOOLS"
           echo "Environment OK"
 
@@ -173,58 +170,6 @@ jobs:
 
           $AAPT dump permissions "$APK"
           echo "APK OK — ${APK_SIZE}MB"
-
-      - name: Google Play Pre-flight Check
-        if: inputs.name == 'Android' && secrets.GOOGLE_PLAY_JSON != ''
-        shell: bash
-        env:
-          GOOGLE_PLAY_JSON: ${{ secrets.GOOGLE_PLAY_JSON }}
-        run: |
-          pip install google-auth google-auth-httplib2 google-api-python-client --quiet
-
-          echo "$GOOGLE_PLAY_JSON" > /tmp/gp_key.json
-
-          python3 - << 'PYTHON'
-          import json, os, sys
-          from google.oauth2 import service_account
-          from googleapiclient.discovery import build
-
-          PACKAGE  = os.environ['PACKAGE_NAME']
-          APK_PATH = os.environ['APK_PATH']
-
-          with open('/tmp/gp_key.json') as f:
-              key = json.load(f)
-
-          creds   = service_account.Credentials.from_service_account_info(
-              key, scopes=['https://www.googleapis.com/auth/androidpublisher'])
-          service = build('androidpublisher', 'v3', credentials=creds)
-          edits   = service.edits()
-
-          edit    = edits.insert(packageName=PACKAGE, body={}).execute()
-          edit_id = edit['id']
-
-          try:
-              details = edits.details().get(packageName=PACKAGE, editId=edit_id).execute()
-              print(f"App:      {details.get('title', 'N/A')}")
-              print(f"Language: {details.get('defaultLanguage', 'N/A')}")
-          except Exception as e:
-              print(f"Details (non-fatal): {e}")
-
-          try:
-              tracks = edits.tracks().list(packageName=PACKAGE, editId=edit_id).execute()
-              for track in tracks.get('tracks', []):
-                  releases = track.get('releases', [])
-                  if releases:
-                      latest = releases[-1]
-                      print(f"Track {track.get('track')}: {latest.get('status')} codes={latest.get('versionCodes', [])}")
-          except Exception as e:
-              print(f"Tracks (non-fatal): {e}")
-
-          edits.delete(packageName=PACKAGE, editId=edit_id).execute()
-          print("Google Play pre-flight OK")
-          PYTHON
-
-          rm -f /tmp/gp_key.json
 
       - name: Make IPA
         if: inputs.name == 'iOS'
