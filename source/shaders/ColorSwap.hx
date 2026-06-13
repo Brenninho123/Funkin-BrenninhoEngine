@@ -19,80 +19,70 @@ class ColorSwap
 
 	private function set_hue(v:Float):Float
 	{
-		shader.uHue.value         = [hue = v];
-		return v;
+		shader.uHue.value        = [hue = v]; return v;
 	}
 	private function set_saturation(v:Float):Float
 	{
-		shader.uSaturation.value  = [saturation = v];
-		return v;
+		shader.uSaturation.value = [saturation = v]; return v;
 	}
 	private function set_brightness(v:Float):Float
 	{
-		shader.uBrightness.value  = [brightness = v];
-		return v;
+		shader.uBrightness.value = [brightness = v]; return v;
 	}
 	private function set_contrast(v:Float):Float
 	{
-		shader.uContrast.value    = [contrast = v];
-		return v;
+		shader.uContrast.value   = [contrast = v]; return v;
 	}
 	private function set_temperature(v:Float):Float
 	{
-		shader.uTemperature.value = [temperature = v];
-		return v;
+		shader.uTemperature.value = [temperature = v]; return v;
 	}
 	private function set_outline(v:Bool):Bool
 	{
-		shader.awesomeOutline.value = [outline = v];
-		return v;
+		shader.uOutlineEnabled.value = [outline = v]; return v;
 	}
 	private function set_outlineColor(v:Array<Float>):Array<Float>
 	{
-		shader.uOutlineColor.value = v;
-		return outlineColor = v;
+		shader.uOutlineColor.value = v; return outlineColor = v;
 	}
 	private function set_outlineSize(v:Float):Float
 	{
-		shader.uOutlineSize.value  = [outlineSize = v];
-		return v;
+		shader.uOutlineSize.value = [outlineSize = v]; return v;
 	}
 	private function set_vignette(v:Float):Float
 	{
-		shader.uVignette.value     = [vignette = v];
-		return v;
+		shader.uVignette.value   = [vignette = v]; return v;
 	}
 	private function set_vignetteColor(v:Array<Float>):Array<Float>
 	{
-		shader.uVignetteColor.value = v;
-		return vignetteColor = v;
+		shader.uVignetteColor.value = v; return vignetteColor = v;
 	}
 
 	public function new()
 	{
-		shader.uHue.value           = [0.0];
-		shader.uSaturation.value    = [0.0];
-		shader.uBrightness.value    = [0.0];
-		shader.uContrast.value      = [0.0];
-		shader.uTemperature.value   = [0.0];
-		shader.awesomeOutline.value = [false];
-		shader.uOutlineColor.value  = [1.0, 1.0, 1.0, 1.0];
-		shader.uOutlineSize.value   = [3.0];
-		shader.uVignette.value      = [0.0];
-		shader.uVignetteColor.value = [0.0, 0.0, 0.0];
+		shader.uHue.value            = [0.0];
+		shader.uSaturation.value     = [0.0];
+		shader.uBrightness.value     = [0.0];
+		shader.uContrast.value       = [0.0];
+		shader.uTemperature.value    = [0.0];
+		shader.uOutlineEnabled.value = [false];
+		shader.uOutlineColor.value   = [1.0, 1.0, 1.0, 1.0];
+		shader.uOutlineSize.value    = [3.0];
+		shader.uVignette.value       = [0.0];
+		shader.uVignetteColor.value  = [0.0, 0.0, 0.0];
 	}
 
 	public function reset():Void
 	{
-		hue          = 0;
-		saturation   = 0;
-		brightness   = 0;
-		contrast     = 0;
-		temperature  = 0;
-		outline      = false;
-		outlineSize  = 3.0;
-		outlineColor = [1.0, 1.0, 1.0, 1.0];
-		vignette     = 0.0;
+		hue           = 0;
+		saturation    = 0;
+		brightness    = 0;
+		contrast      = 0;
+		temperature   = 0;
+		outline       = false;
+		outlineSize   = 3.0;
+		outlineColor  = [1.0, 1.0, 1.0, 1.0];
+		vignette      = 0.0;
 		vignetteColor = [0.0, 0.0, 0.0];
 	}
 }
@@ -101,12 +91,12 @@ class ColorSwapShader extends FlxShader
 {
 	@:glFragmentSource('
 		varying float openfl_Alphav;
-		varying vec4 openfl_ColorMultiplierv;
-		varying vec4 openfl_ColorOffsetv;
-		varying vec2 openfl_TextureCoordv;
+		varying vec4  openfl_ColorMultiplierv;
+		varying vec4  openfl_ColorOffsetv;
+		varying vec2  openfl_TextureCoordv;
 
-		uniform bool openfl_HasColorTransform;
-		uniform vec2 openfl_TextureSize;
+		uniform bool      openfl_HasColorTransform;
+		uniform vec2      openfl_TextureSize;
 		uniform sampler2D bitmap;
 
 		uniform bool hasTransform;
@@ -120,12 +110,12 @@ class ColorSwapShader extends FlxShader
 			if (!hasColorTransform) return color * openfl_Alphav;
 
 			color = vec4(color.rgb / color.a, color.a);
-			mat4 colorMultiplier = mat4(0);
-			colorMultiplier[0][0] = openfl_ColorMultiplierv.x;
-			colorMultiplier[1][1] = openfl_ColorMultiplierv.y;
-			colorMultiplier[2][2] = openfl_ColorMultiplierv.z;
-			colorMultiplier[3][3] = openfl_ColorMultiplierv.w;
-			color = clamp(openfl_ColorOffsetv + (color * colorMultiplier), 0.0, 1.0);
+			mat4 cm = mat4(0);
+			cm[0][0] = openfl_ColorMultiplierv.x;
+			cm[1][1] = openfl_ColorMultiplierv.y;
+			cm[2][2] = openfl_ColorMultiplierv.z;
+			cm[3][3] = openfl_ColorMultiplierv.w;
+			color = clamp(openfl_ColorOffsetv + (color * cm), 0.0, 1.0);
 			if (color.a > 0.0)
 				return vec4(color.rgb * color.a * openfl_Alphav, color.a * openfl_Alphav);
 			return vec4(0.0);
@@ -136,7 +126,7 @@ class ColorSwapShader extends FlxShader
 		uniform float uBrightness;
 		uniform float uContrast;
 		uniform float uTemperature;
-		uniform bool  awesomeOutline;
+		uniform bool  uOutlineEnabled;
 		uniform vec4  uOutlineColor;
 		uniform float uOutlineSize;
 		uniform float uVignette;
@@ -159,23 +149,6 @@ class ColorSwapShader extends FlxShader
 			return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 		}
 
-		vec3 applyTemperature(vec3 color, float temp)
-		{
-			color.r += temp * 0.1;
-			color.b -= temp * 0.1;
-			return clamp(color, 0.0, 1.0);
-		}
-
-		vec3 applyContrast(vec3 color, float contrast)
-		{
-			return clamp((color - 0.5) * (1.0 + contrast) + 0.5, 0.0, 1.0);
-		}
-
-		float luminance(vec3 c)
-		{
-			return dot(c, vec3(0.2126, 0.7152, 0.0722));
-		}
-
 		void main()
 		{
 			vec4 color = flixel_texture2D(bitmap, openfl_TextureCoordv);
@@ -184,7 +157,11 @@ class ColorSwapShader extends FlxShader
 			vec3 rgb = color.rgb / color.a;
 
 			if (uTemperature != 0.0)
-				rgb = applyTemperature(rgb, uTemperature);
+			{
+				rgb.r += uTemperature * 0.1;
+				rgb.b -= uTemperature * 0.1;
+				rgb    = clamp(rgb, 0.0, 1.0);
+			}
 
 			vec3 hsv = rgb2hsv(rgb);
 			hsv.x    = fract(hsv.x + uHue);
@@ -193,16 +170,16 @@ class ColorSwapShader extends FlxShader
 			rgb      = hsv2rgb(hsv);
 
 			if (uContrast != 0.0)
-				rgb = applyContrast(rgb, uContrast);
+				rgb = clamp((rgb - 0.5) * (1.0 + uContrast) + 0.5, 0.0, 1.0);
 
-			rgb = mix(rgb, pow(max(rgb, vec3(0.0)), vec3(1.0 / 2.2)), 0.35);
+			rgb  = mix(rgb, pow(max(rgb, vec3(0.0)), vec3(1.0 / 2.2)), 0.35);
 
-			float lum = luminance(rgb);
+			float lum = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
 			rgb = mix(rgb, vec3(lum), clamp((0.18 - lum) * 1.5, 0.0, 0.25));
 
 			color = vec4(rgb * color.a, color.a);
 
-			if (awesomeOutline && color.a <= 0.5)
+			if (uOutlineEnabled && color.a <= 0.5)
 			{
 				float w = uOutlineSize / openfl_TextureSize.x;
 				float h = uOutlineSize / openfl_TextureSize.y;
@@ -260,8 +237,8 @@ class ColorSwapShader extends FlxShader
 				openfl_ColorOffsetv     = openfl_ColorOffset / 255.0;
 			}
 
-			gl_Position      = openfl_Matrix * openfl_Position;
-			openfl_Alphav    = openfl_Alpha * alpha;
+			gl_Position   = openfl_Matrix * openfl_Position;
+			openfl_Alphav = openfl_Alpha * alpha;
 
 			if (hasColorTransform)
 			{
@@ -270,8 +247,5 @@ class ColorSwapShader extends FlxShader
 			}
 		}')
 
-	public function new()
-	{
-		super();
-	}
+	public function new() { super(); }
 }
