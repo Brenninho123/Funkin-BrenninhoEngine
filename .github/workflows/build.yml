@@ -19,21 +19,13 @@ on:
         required: true
         type: string
     secrets:
-      KEYSTORE_BASE64:
-        required: false
-      KEYSTORE_PASSWORD:
-        required: false
-      KEYSTORE_ALIAS:
-        required: false
-      KEYSTORE_ALIAS_PASSWORD:
-        required: false
       GOOGLE_PLAY_JSON:
         required: false
 
 env:
-  HAXE_VERSION:   4.3.7
-  PROJECT_NAME:   BrenninhoEngine
-  PACKAGE_NAME:   com.funkin.brenninhoengine
+  HAXE_VERSION: 4.3.7
+  PROJECT_NAME: BrenninhoEngine
+  PACKAGE_NAME: com.funkin.brenninhoengine
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
@@ -41,6 +33,9 @@ jobs:
     name: Build
     runs-on: ${{ inputs.os }}
     timeout-minutes: 90
+
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -114,55 +109,32 @@ jobs:
       - name: Configure Android SDK
         if: inputs.name == 'Android'
         run: |
-          haxelib run lime config ANDROID_SDK       $ANDROID_HOME
-          haxelib run lime config ANDROID_NDK_ROOT  $ANDROID_NDK_LATEST_HOME
-          haxelib run lime config JAVA_HOME         $JAVA_HOME_17_arm64
-          haxelib run lime config ANDROID_SETUP     true
+          haxelib run lime config ANDROID_SDK      $ANDROID_HOME
+          haxelib run lime config ANDROID_NDK_ROOT $ANDROID_NDK_LATEST_HOME
+          haxelib run lime config JAVA_HOME        $JAVA_HOME_17_arm64
+          haxelib run lime config ANDROID_SETUP    true
 
       - name: Validate Android Environment
         if: inputs.name == 'Android'
         shell: bash
         run: |
-          echo "=== Android SDK ==="
-          echo "SDK:  $ANDROID_HOME"
-          echo "NDK:  $ANDROID_NDK_LATEST_HOME"
-          echo "Java: $JAVA_HOME_17_arm64"
-
           java -version
 
           BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)
-          echo "Build Tools: $BUILD_TOOLS"
           echo "ANDROID_BUILD_TOOLS=$BUILD_TOOLS" >> $GITHUB_ENV
 
           NDK_VER=$(basename $ANDROID_NDK_LATEST_HOME)
-          echo "NDK Version: $NDK_VER"
           echo "ANDROID_NDK_VERSION=$NDK_VER" >> $GITHUB_ENV
 
           if [ ! -f "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" ]; then
-            echo "ERROR: aapt not found in build-tools"
+            echo "ERROR: aapt not found"
             exit 1
           fi
 
+          echo "SDK:         $ANDROID_HOME"
+          echo "NDK:         $ANDROID_NDK_LATEST_HOME ($NDK_VER)"
+          echo "Build Tools: $BUILD_TOOLS"
           echo "Environment OK"
-
-      - name: Setup Android Keystore
-        if: inputs.name == 'Android' && secrets.KEYSTORE_BASE64 != ''
-        shell: bash
-        env:
-          KEYSTORE_BASE64:       ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD:     ${{ secrets.KEYSTORE_PASSWORD }}
-          KEYSTORE_ALIAS:        ${{ secrets.KEYSTORE_ALIAS }}
-          KEYSTORE_ALIAS_PASSWORD: ${{ secrets.KEYSTORE_ALIAS_PASSWORD }}
-        run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > key.keystore
-          echo "KEYSTORE_PATH=$(pwd)/key.keystore" >> $GITHUB_ENV
-
-          keytool -list -v \
-            -keystore key.keystore \
-            -storepass "$KEYSTORE_PASSWORD" \
-            -alias "$KEYSTORE_ALIAS" 2>&1 | grep -E "Alias|Valid|SHA"
-
-          echo "Keystore OK"
 
       - name: Compile
         run: |
@@ -180,11 +152,9 @@ jobs:
             exit 1
           fi
           echo "APK_PATH=$APK" >> $GITHUB_ENV
-          echo "APK found: $APK"
 
           AAPT="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}/aapt"
 
-          echo "=== APK Info ==="
           $AAPT dump badging "$APK" | grep -E "package|versionCode|versionName|sdkVersion|targetSdkVersion|native-code"
 
           PACKAGE=$($AAPT dump badging "$APK" | grep "^package" | sed "s/.*name='//;s/'.*//")
@@ -193,8 +163,6 @@ jobs:
             exit 1
           fi
 
-          echo "=== APK Size ==="
-          du -sh "$APK"
           APK_SIZE=$(du -m "$APK" | cut -f1)
           echo "APK_SIZE_MB=$APK_SIZE" >> $GITHUB_ENV
 
@@ -203,84 +171,59 @@ jobs:
             exit 1
           fi
 
-          echo "=== APK Permissions ==="
           $AAPT dump permissions "$APK"
-
-          echo "=== APK Native Libraries ==="
-          $AAPT dump badging "$APK" | grep "native-code" || echo "No native libs listed in badging"
-
-          echo "APK OK"
-
-      - name: Verify APK Signature
-        if: inputs.name == 'Android' && env.KEYSTORE_PATH != ''
-        shell: bash
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEYSTORE_ALIAS:    ${{ secrets.KEYSTORE_ALIAS }}
-        run: |
-          APKSIGNER="$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS }}/apksigner"
-
-          echo "=== Signature Verification ==="
-          $APKSIGNER verify --verbose "${{ env.APK_PATH }}" 2>&1
-
-          echo "=== Signer Info ==="
-          $APKSIGNER verify --print-certs "${{ env.APK_PATH }}" 2>&1 | grep -E "Signer|DN|SHA"
-
-          echo "Signature OK"
+          echo "APK OK — ${APK_SIZE}MB"
 
       - name: Google Play Pre-flight Check
         if: inputs.name == 'Android' && secrets.GOOGLE_PLAY_JSON != ''
         shell: bash
+        env:
+          GOOGLE_PLAY_JSON: ${{ secrets.GOOGLE_PLAY_JSON }}
         run: |
           pip install google-auth google-auth-httplib2 google-api-python-client --quiet
 
-          cat > /tmp/gp_check.py << 'PYTHON'
-          import json, sys, os
+          echo "$GOOGLE_PLAY_JSON" > /tmp/gp_key.json
+
+          python3 - << 'PYTHON'
+          import json, os, sys
           from google.oauth2 import service_account
           from googleapiclient.discovery import build
 
-          KEY_FILE    = '/tmp/gp_key.json'
-          PACKAGE     = os.environ['PACKAGE_NAME']
-          APK_PATH    = os.environ['APK_PATH']
+          PACKAGE  = os.environ['PACKAGE_NAME']
+          APK_PATH = os.environ['APK_PATH']
 
-          with open(KEY_FILE) as f:
+          with open('/tmp/gp_key.json') as f:
               key = json.load(f)
 
-          creds = service_account.Credentials.from_service_account_info(
+          creds   = service_account.Credentials.from_service_account_info(
               key, scopes=['https://www.googleapis.com/auth/androidpublisher'])
-
           service = build('androidpublisher', 'v3', credentials=creds)
           edits   = service.edits()
 
-          edit = edits.insert(packageName=PACKAGE, body={}).execute()
+          edit    = edits.insert(packageName=PACKAGE, body={}).execute()
           edit_id = edit['id']
 
           try:
               details = edits.details().get(packageName=PACKAGE, editId=edit_id).execute()
-              print(f"App title:         {details.get('title', 'N/A')}")
-              print(f"Default language:  {details.get('defaultLanguage', 'N/A')}")
+              print(f"App:      {details.get('title', 'N/A')}")
+              print(f"Language: {details.get('defaultLanguage', 'N/A')}")
           except Exception as e:
-              print(f"Details fetch failed (non-fatal): {e}")
+              print(f"Details (non-fatal): {e}")
 
           try:
               tracks = edits.tracks().list(packageName=PACKAGE, editId=edit_id).execute()
               for track in tracks.get('tracks', []):
-                  name    = track.get('track')
                   releases = track.get('releases', [])
                   if releases:
                       latest = releases[-1]
-                      status = latest.get('status')
-                      codes  = latest.get('versionCodes', [])
-                      print(f"Track {name}: status={status} versionCodes={codes}")
+                      print(f"Track {track.get('track')}: {latest.get('status')} codes={latest.get('versionCodes', [])}")
           except Exception as e:
-              print(f"Tracks fetch failed (non-fatal): {e}")
+              print(f"Tracks (non-fatal): {e}")
 
           edits.delete(packageName=PACKAGE, editId=edit_id).execute()
           print("Google Play pre-flight OK")
           PYTHON
 
-          echo '${{ secrets.GOOGLE_PLAY_JSON }}' > /tmp/gp_key.json
-          PACKAGE_NAME=${{ env.PACKAGE_NAME }} APK_PATH=${{ env.APK_PATH }} python3 /tmp/gp_check.py
           rm -f /tmp/gp_key.json
 
       - name: Make IPA
