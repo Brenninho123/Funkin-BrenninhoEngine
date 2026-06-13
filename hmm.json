@@ -4,7 +4,7 @@
       "name": "lime",
       "type": "git",
       "dir": null,
-      "ref": "main",
+      "ref": null,
       "url": "https://github.com/AlafandyPorting/lime-0.7.3"
     },
     {
@@ -36,14 +36,14 @@
       "name": "hxcpp",
       "type": "git",
       "dir": null,
-      "ref": "main",
+      "ref": null,
       "url": "https://github.com/AlafandyPorting/hxcpp"
     },
     {
       "name": "hxCodec",
       "type": "git",
       "dir": null,
-      "ref": "main",
+      "ref": null,
       "url": "https://github.com/polybiusproxy/hxCodec"
     },
     {
@@ -55,7 +55,7 @@
       "name": "SScript",
       "type": "git",
       "dir": null,
-      "ref": "main",
+      "ref": null,
       "url": "https://github.com/AlafandyPorting/SScript"
     },
     {
@@ -72,14 +72,14 @@
       "name": "linc_luajit",
       "type": "git",
       "dir": null,
-      "ref": "master",
+      "ref": null,
       "url": "https://github.com/AlafandyPorting/linc_luajit-0.7.3"
     },
     {
       "name": "flxanimate",
       "type": "git",
       "dir": null,
-      "ref": "main",
+      "ref": null,
       "url": "https://github.com/Dot-Stuff/flxanimate.git"
     }
   ]
