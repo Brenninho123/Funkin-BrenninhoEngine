@@ -52,6 +52,8 @@ class MainMenuState extends MusicBeatState
 	private var _hxScript:Null<HScript>    = null;
 	#end
 
+	static final _STOP:String = 'Function_Stop';
+
 	override function create():Void
 	{
 		#if MODS_ALLOWED
@@ -149,9 +151,9 @@ class MainMenuState extends MusicBeatState
 		if (scriptPath.endsWith('.lua'))
 		{
 			_luaScript = new FunkinLua(scriptPath);
-			_luaScript.set('curSelected',    curSelected);
-			_luaScript.set('optionCount',    OPTIONS.length);
-			_luaScript.set('engineVersion',  psychEngineVersion);
+			_luaScript.set('curSelected',   curSelected);
+			_luaScript.set('optionCount',   OPTIONS.length);
+			_luaScript.set('engineVersion', psychEngineVersion);
 			return;
 		}
 		#end
@@ -178,7 +180,7 @@ class MainMenuState extends MusicBeatState
 		if (_luaScript != null)
 		{
 			var result = _luaScript.call(func, args);
-			if (result == FunkinLua.FUNCTION_STOP) return result;
+			if (result == _STOP) return result;
 		}
 		#end
 
@@ -242,15 +244,14 @@ class MainMenuState extends MusicBeatState
 			default:          0xFFFF3333;
 		};
 
-		onlineDot.color     = dotColor;
-		onlineCountTxt.text = '$count online';
+		onlineDot.color      = dotColor;
+		onlineCountTxt.text  = '$count online';
 		onlineCountTxt.color = count > 0 ? FlxColor.WHITE : 0xFF888888;
 	}
 
 	private function _handleAccept():Void
 	{
-		if (_callScript('onAccept', [OPTIONS[curSelected]]) == #if LUA_ALLOWED FunkinLua.FUNCTION_STOP #else 'stop' #end)
-			return;
+		if (_callScript('onAccept', [OPTIONS[curSelected]]) == _STOP) return;
 
 		FlxG.sound.play(Paths.sound('confirmMenu'));
 
@@ -316,25 +317,22 @@ class MainMenuState extends MusicBeatState
 		}
 
 		OnlineUsers.update(elapsed);
-
 		_callScript('onUpdate', [elapsed]);
 
 		if (!selectedSomethin)
 		{
 			if (controls.UI_UP_P)
 			{
-				if (_callScript('onUp') != #if LUA_ALLOWED FunkinLua.FUNCTION_STOP #else 'stop' #end)
-					changeItem(-1);
+				if (_callScript('onUp') != _STOP) changeItem(-1);
 			}
 			if (controls.UI_DOWN_P)
 			{
-				if (_callScript('onDown') != #if LUA_ALLOWED FunkinLua.FUNCTION_STOP #else 'stop' #end)
-					changeItem(1);
+				if (_callScript('onDown') != _STOP) changeItem(1);
 			}
 
 			if (controls.BACK)
 			{
-				if (_callScript('onBack') != #if LUA_ALLOWED FunkinLua.FUNCTION_STOP #else 'stop' #end)
+				if (_callScript('onBack') != _STOP)
 				{
 					selectedSomethin = true;
 					FlxG.sound.play(Paths.sound('cancelMenu'));
@@ -342,8 +340,7 @@ class MainMenuState extends MusicBeatState
 				}
 			}
 
-			if (controls.ACCEPT)
-				_handleAccept();
+			if (controls.ACCEPT) _handleAccept();
 
 			#if mobile
 			if (controls.justPressed('debug_1') || touchPad.buttonE.justPressed)
@@ -365,19 +362,10 @@ class MainMenuState extends MusicBeatState
 		_callScript('onDestroy');
 
 		#if LUA_ALLOWED
-		if (_luaScript != null)
-		{
-			_luaScript.stop();
-			_luaScript = null;
-		}
+		if (_luaScript != null) { _luaScript.stop(); _luaScript = null; }
 		#end
-
 		#if HSCRIPT_ALLOWED
-		if (_hxScript != null)
-		{
-			_hxScript.stop();
-			_hxScript = null;
-		}
+		if (_hxScript != null) { _hxScript.stop(); _hxScript = null; }
 		#end
 
 		super.destroy();
