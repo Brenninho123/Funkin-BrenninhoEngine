@@ -29,7 +29,7 @@ jobs:
   build:
     name: Build
     runs-on: ${{ inputs.os }}
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     permissions:
       contents: read
@@ -83,7 +83,7 @@ jobs:
         if: inputs.name == 'iOS'
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.4'
+          xcode-version: 'latest-stable'
 
       - name: Install Libraries
         run: |
@@ -133,7 +133,18 @@ jobs:
           echo "Build Tools: $BUILD_TOOLS"
           echo "Environment OK"
 
-      - name: Compile
+      - name: Compile (attempt 1)
+        id: compile_1
+        timeout-minutes: 60
+        continue-on-error: true
+        run: |
+          haxelib run lime build ${{ inputs.buildArgs }} \
+            -DHXCPP_COMPILE_THREADS=${{ env.CPUS }} \
+            -DHXCPP_OPTIMIZE_FOR_CPUID=1
+
+      - name: Compile (retry)
+        if: steps.compile_1.outcome == 'failure'
+        timeout-minutes: 60
         run: |
           haxelib run lime build ${{ inputs.buildArgs }} \
             -DHXCPP_COMPILE_THREADS=${{ env.CPUS }} \
