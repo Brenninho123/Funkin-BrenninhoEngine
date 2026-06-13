@@ -2,10 +2,11 @@ package backend;
 
 class PsychCamera extends FlxCamera
 {
+	public var followLerp:Float = 0;
+
 	override public function update(elapsed:Float):Void
 	{
-		if (target != null)
-			updateFollowDelta(elapsed);
+		if (target != null) updateFollowDelta(elapsed);
 
 		updateScroll();
 		updateFlash(elapsed);
@@ -33,15 +34,11 @@ class PsychCamera extends FlxCamera
 
 			if (style == SCREEN_BY_SCREEN)
 			{
-				if (targetX >= viewRight)
-					_scrollTarget.x += viewWidth;
-				else if (targetX + target.width < viewLeft)
-					_scrollTarget.x -= viewWidth;
+				if (targetX >= viewRight)              _scrollTarget.x += viewWidth;
+				else if (targetX + target.width < viewLeft) _scrollTarget.x -= viewWidth;
 
-				if (targetY >= viewBottom)
-					_scrollTarget.y += viewHeight;
-				else if (targetY + target.height < viewTop)
-					_scrollTarget.y -= viewHeight;
+				if (targetY >= viewBottom)             _scrollTarget.y += viewHeight;
+				else if (targetY + target.height < viewTop) _scrollTarget.y -= viewHeight;
 
 				bindScrollPos(_scrollTarget);
 			}
@@ -76,12 +73,5 @@ class PsychCamera extends FlxCamera
 		var mult:Float = 1 - Math.exp(-elapsed * followLerp);
 		scroll.x += (_scrollTarget.x - scroll.x) * mult;
 		scroll.y += (_scrollTarget.y - scroll.y) * mult;
-	}
-
-	public var followLerp(default, set):Float = 0;
-
-	function set_followLerp(value:Float):Float
-	{
-		return followLerp = value;
 	}
 }
