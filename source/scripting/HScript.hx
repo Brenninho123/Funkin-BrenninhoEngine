@@ -39,13 +39,13 @@ class HScript
 	public var active:Bool           = true;
 	public var isDead:Bool           = false;
 
-	public var logs:Array<ScriptLog> = [];
-	public var onLog:String->String->Void = null;
+	public var logs:Array<ScriptLog>              = [];
+	public var onLog:String->String->Void         = null;
 
-	private var _interp:Interp      = null;
-	private var _parser:Parser      = null;
-	private var _expr:Expr          = null;
-	private var _vars:Map<String, Dynamic> = new Map();
+	private var _interp:Interp                    = null;
+	private var _parser:Parser                    = null;
+	private var _expr:Expr                        = null;
+	private var _vars:Map<String, Dynamic>        = new Map();
 	private var _callbacks:Map<String, Array<Dynamic->Dynamic>> = new Map();
 
 	static final MAX_LOGS:Int = 200;
@@ -55,15 +55,13 @@ class HScript
 		scriptPath = path;
 		scriptName = haxe.io.Path.withoutExtension(haxe.io.Path.withoutDirectory(path));
 
-		_parser  = new Parser();
+		_parser                 = new Parser();
 		_parser.allowTypes      = true;
 		_parser.allowMetadata   = true;
 		_parser.allowJSON       = true;
 		_parser.resumeErrors    = true;
 
-		_interp  = new Interp();
-		_interp.allowStaticVariables = true;
-		_interp.allowPublicVariables = true;
+		_interp = new Interp();
 
 		_registerDefaults();
 		_loadFile(path);
@@ -71,9 +69,9 @@ class HScript
 
 	public static function fromString(code:String, ?name:String = 'inline'):HScript
 	{
-		var hs:HScript   = new HScript('');
-		hs.scriptPath    = '<inline>';
-		hs.scriptName    = name;
+		var hs:HScript = new HScript('');
+		hs.scriptPath  = '<inline>';
+		hs.scriptName  = name;
 		hs._loadString(code);
 		return hs;
 	}
@@ -87,7 +85,6 @@ class HScript
 		{
 			var fn:Dynamic = _interp.variables.get(func);
 			if (fn == null) return FUNCTION_CONTINUE;
-
 			var result:Dynamic = Reflect.callMethod(null, fn, args);
 			return result ?? FUNCTION_CONTINUE;
 		}
@@ -170,9 +167,7 @@ class HScript
 	public function reload():Void
 	{
 		if (scriptPath == '' || scriptPath == '<inline>') return;
-		_interp  = new Interp();
-		_interp.allowStaticVariables = true;
-		_interp.allowPublicVariables = true;
+		_interp = new Interp();
 		_registerDefaults();
 		for (key => val in _vars) _interp.variables.set(key, val);
 		_loadFile(scriptPath);
@@ -181,8 +176,8 @@ class HScript
 
 	public function stop():Void
 	{
-		active = false;
-		isDead = true;
+		active  = false;
+		isDead  = true;
 		_callbacks.clear();
 		_vars.clear();
 		if (_interp != null)
@@ -194,10 +189,7 @@ class HScript
 		_expr   = null;
 	}
 
-	public function clearLogs():Void
-	{
-		logs = [];
-	}
+	public function clearLogs():Void { logs = []; }
 
 	public function getLogText():String
 	{
@@ -210,21 +202,14 @@ class HScript
 		try
 		{
 			#if sys
-			if (!sys.FileSystem.exists(path))
-			{
-				_logError('Script not found: $path');
-				return;
-			}
+			if (!sys.FileSystem.exists(path)) { _logError('Script not found: $path'); return; }
 			var content:String = sys.io.File.getContent(path);
 			#else
 			var content:String = Assets.getText(path);
 			#end
 			_loadString(content);
 		}
-		catch (e:Dynamic)
-		{
-			_logError('Failed to load $path: $e');
-		}
+		catch (e:Dynamic) { _logError('Failed to load $path: $e'); }
 	}
 
 	private function _loadString(code:String):Void
@@ -235,60 +220,53 @@ class HScript
 			_expr = _parser.parseString(code, scriptName);
 			_interp.execute(_expr);
 		}
-		catch (e:Dynamic)
-		{
-			_logError('Parse/execute error in $scriptName: $e');
-		}
+		catch (e:Dynamic) { _logError('Parse/execute error in $scriptName: $e'); }
 	}
 
 	private function _registerDefaults():Void
 	{
 		var i = _interp;
 
-		i.variables.set('Math',          Math);
-		i.variables.set('Std',           Std);
-		i.variables.set('String',        String);
-		i.variables.set('StringTools',   StringTools);
-		i.variables.set('Type',          Type);
-		i.variables.set('Reflect',       Reflect);
-		i.variables.set('Json',          Json);
-		i.variables.set('Date',          Date);
-		i.variables.set('DateTools',     DateTools);
-		i.variables.set('EReg',          EReg);
-		i.variables.set('Lambda',        Lambda);
+		i.variables.set('Math',        Math);
+		i.variables.set('Std',         Std);
+		i.variables.set('String',      String);
+		i.variables.set('StringTools', StringTools);
+		i.variables.set('Type',        Type);
+		i.variables.set('Reflect',     Reflect);
+		i.variables.set('Json',        Json);
+		i.variables.set('Date',        Date);
+		i.variables.set('DateTools',   DateTools);
+		i.variables.set('EReg',        EReg);
+		i.variables.set('Lambda',      Lambda);
 
-		i.variables.set('FlxG',          FlxG);
-		i.variables.set('FlxSprite',     FlxSprite);
-		i.variables.set('FlxText',       FlxText);
-		i.variables.set('FlxTween',      FlxTween);
-		i.variables.set('FlxEase',       FlxEase);
-		i.variables.set('FlxColor',      FlxColor);
-		i.variables.set('FlxTimer',      FlxTimer);
-		i.variables.set('FlxMath',       FlxMath);
-		i.variables.set('FlxSound',      FlxSound);
+		i.variables.set('FlxG',        FlxG);
+		i.variables.set('FlxSprite',   FlxSprite);
+		i.variables.set('FlxText',     FlxText);
+		i.variables.set('FlxTween',    FlxTween);
+		i.variables.set('FlxEase',     FlxEase);
+		i.variables.set('FlxColor',    FlxColor);
+		i.variables.set('FlxTimer',    FlxTimer);
+		i.variables.set('FlxMath',     FlxMath);
+		i.variables.set('FlxSound',    FlxSound);
 
-		i.variables.set('Paths',         Paths);
-		i.variables.set('ClientPrefs',   ClientPrefs);
-		i.variables.set('CoolUtil',      CoolUtil);
-		i.variables.set('Conductor',     Conductor);
-		i.variables.set('PlayState',     PlayState);
+		i.variables.set('Paths',       Paths);
+		i.variables.set('ClientPrefs', ClientPrefs);
+		i.variables.set('CoolUtil',    CoolUtil);
+		i.variables.set('Conductor',   Conductor);
+		i.variables.set('PlayState',   PlayState);
 
 		#if MODS_ALLOWED
-		i.variables.set('Mods',          Mods);
+		i.variables.set('Mods',        Mods);
 		#end
 
 		i.variables.set('Function_Stop',     FUNCTION_STOP);
 		i.variables.set('Function_Continue', FUNCTION_CONTINUE);
+		i.variables.set('scriptName',        scriptName);
+		i.variables.set('scriptPath',        scriptPath);
 
-		i.variables.set('scriptName',    scriptName);
-		i.variables.set('scriptPath',    scriptPath);
+		i.variables.set('trace', function(v:Dynamic):Void { _logInfo(Std.string(v)); });
 
-		i.variables.set('trace',         function(v:Dynamic):Void
-		{
-			_logInfo(Std.string(v));
-		});
-
-		i.variables.set('debugPrint',    function(v:Dynamic, ?color:FlxColor):Void
+		i.variables.set('debugPrint', function(v:Dynamic, ?color:FlxColor):Void
 		{
 			var msg:String = Std.string(v);
 			_logInfo(msg);
@@ -303,108 +281,68 @@ class HScript
 			#end
 		});
 
-		i.variables.set('addSprite',     function(sprite:FlxSprite):Void
-		{
-			if (FlxG.state != null) FlxG.state.add(sprite);
-		});
+		i.variables.set('addSprite',    function(s:FlxSprite):Void  { if (FlxG.state != null) FlxG.state.add(s); });
+		i.variables.set('removeSprite', function(s:FlxSprite):Void  { if (FlxG.state != null) FlxG.state.remove(s, true); });
 
-		i.variables.set('removeSprite',  function(sprite:FlxSprite):Void
-		{
-			if (FlxG.state != null) FlxG.state.remove(sprite, true);
-		});
-
-		i.variables.set('makeSprite',    function(?x:Float = 0, ?y:Float = 0, ?image:String = null):FlxSprite
+		i.variables.set('makeSprite', function(?x:Float = 0, ?y:Float = 0, ?image:String = null):FlxSprite
 		{
 			var spr = new FlxSprite(x, y);
 			if (image != null) spr.loadGraphic(Paths.image(image));
 			return spr;
 		});
 
-		i.variables.set('makeText',      function(x:Float, y:Float, width:Float, text:String, ?size:Int = 16):FlxText
+		i.variables.set('makeText', function(x:Float, y:Float, width:Float, text:String, ?size:Int = 16):FlxText
 		{
 			return new FlxText(x, y, width, text, size);
 		});
 
-		i.variables.set('playSound',     function(key:String, ?vol:Float = 1.0):Void
+		i.variables.set('playSound', function(key:String, ?vol:Float = 1.0):Void { FlxG.sound.play(Paths.sound(key), vol); });
+		i.variables.set('playMusic', function(key:String, ?vol:Float = 1.0):Void { FlxG.sound.playMusic(Paths.music(key), vol); });
+		i.variables.set('getImage',  function(key:String, ?library:String):Dynamic { return Paths.image(key, library); });
+
+		i.variables.set('tween', function(obj:Dynamic, vals:Dynamic, dur:Float, ?ease:String = 'linear'):FlxTween
 		{
-			FlxG.sound.play(Paths.sound(key), vol);
+			return FlxTween.tween(obj, vals, dur, {ease: _resolveEase(ease)});
 		});
 
-		i.variables.set('playMusic',     function(key:String, ?vol:Float = 1.0):Void
+		i.variables.set('tweenColor', function(obj:Dynamic, dur:Float, from:FlxColor, to:FlxColor, ?ease:String = 'linear', ?onUpdate:Dynamic):Void
 		{
-			FlxG.sound.playMusic(Paths.music(key), vol);
-		});
-
-		i.variables.set('getImage',      function(key:String, ?library:String):Dynamic
-		{
-			return Paths.image(key, library);
-		});
-
-		i.variables.set('tween',         function(obj:Dynamic, vals:Dynamic, dur:Float, ?ease:String = 'linear'):FlxTween
-		{
-			var easeFunc = _resolveEase(ease);
-			return FlxTween.tween(obj, vals, dur, {ease: easeFunc});
-		});
-
-		i.variables.set('tweenColor',    function(obj:Dynamic, dur:Float, from:FlxColor, to:FlxColor, ?ease:String = 'linear', ?onUpdate:Dynamic):Void
-		{
-			var easeFunc = _resolveEase(ease);
 			FlxTween.color(obj, dur, from, to, {
-				ease:     easeFunc,
+				ease:     _resolveEase(ease),
 				onUpdate: onUpdate != null ? function(_) { onUpdate(); } : null
 			});
 		});
 
-		i.variables.set('cancelTweens',  function(obj:Dynamic):Void
-		{
-			FlxTween.cancelTweensOf(obj);
-		});
+		i.variables.set('cancelTweens', function(obj:Dynamic):Void { FlxTween.cancelTweensOf(obj); });
 
-		i.variables.set('timer',         function(secs:Float, cb:Void->Void, ?loops:Int = 1):FlxTimer
+		i.variables.set('timer', function(secs:Float, cb:Void->Void, ?loops:Int = 1):FlxTimer
 		{
 			return new FlxTimer().start(secs, function(_) { cb(); }, loops);
 		});
 
-		i.variables.set('setVar',        function(name:String, value:Dynamic):Void
-		{
-			set(name, value);
-		});
+		i.variables.set('setVar', function(name:String, value:Dynamic):Void { set(name, value); });
+		i.variables.set('getVar', function(name:String):Dynamic { return get(name); });
 
-		i.variables.set('getVar',        function(name:String):Dynamic
-		{
-			return get(name);
-		});
-
-		i.variables.set('switchState',   function(stateClass:String):Void
+		i.variables.set('switchState', function(stateClass:String):Void
 		{
 			var cls:Dynamic = Type.resolveClass(stateClass);
-			if (cls != null)
-				MusicBeatState.switchState(Type.createInstance(cls, []));
-			else
-				_logError('switchState: class not found — $stateClass');
+			if (cls != null) MusicBeatState.switchState(Type.createInstance(cls, []));
+			else _logError('switchState: class not found — $stateClass');
 		});
 
-		i.variables.set('openSubState',  function(stateClass:String, ?args:Array<Dynamic>):Void
+		i.variables.set('openSubState', function(stateClass:String, ?args:Array<Dynamic>):Void
 		{
 			if (args == null) args = [];
 			var cls:Dynamic = Type.resolveClass(stateClass);
 			if (cls != null && Std.isOfType(FlxG.state, MusicBeatState))
 				cast(FlxG.state, MusicBeatState).openSubState(Type.createInstance(cls, args));
-			else
-				_logError('openSubState: class not found or invalid state — $stateClass');
+			else _logError('openSubState: class not found — $stateClass');
 		});
 
-		i.variables.set('getProperty',   function(obj:Dynamic, field:String):Dynamic
-		{
-			return Reflect.getProperty(obj, field);
-		});
+		i.variables.set('getProperty',   function(obj:Dynamic, field:String):Dynamic    { return Reflect.getProperty(obj, field); });
+		i.variables.set('setProperty',   function(obj:Dynamic, field:String, v:Dynamic):Void { Reflect.setProperty(obj, field, v); });
 
-		i.variables.set('setProperty',   function(obj:Dynamic, field:String, value:Dynamic):Void
-		{
-			Reflect.setProperty(obj, field, value);
-		});
-
-		i.variables.set('callMethod',    function(obj:Dynamic, method:String, ?args:Array<Dynamic>):Dynamic
+		i.variables.set('callMethod', function(obj:Dynamic, method:String, ?args:Array<Dynamic>):Dynamic
 		{
 			if (args == null) args = [];
 			var fn:Dynamic = Reflect.field(obj, method);
@@ -420,38 +358,28 @@ class HScript
 			return Type.createInstance(cls, args);
 		});
 
-		i.variables.set('resolveClass',  function(className:String):Dynamic
-		{
-			return Type.resolveClass(className);
-		});
+		i.variables.set('resolveClass', function(className:String):Dynamic { return Type.resolveClass(className); });
+		i.variables.set('resolveEnum',  function(enumName:String):Dynamic  { return Type.resolveEnum(enumName); });
 
-		i.variables.set('resolveEnum',   function(enumName:String):Dynamic
+		i.variables.set('import', function(className:String):Dynamic
 		{
-			return Type.resolveEnum(enumName);
-		});
-
-		i.variables.set('import',        function(className:String):Dynamic
-		{
-			var cls:Dynamic = Type.resolveClass(className);
-			if (cls == null) cls = Type.resolveEnum(className);
+			var cls:Dynamic = Type.resolveClass(className) ?? Type.resolveEnum(className);
 			if (cls == null) { _logError('import: $className not found'); return null; }
 			var parts:Array<String> = className.split('.');
-			var shortName:String    = parts[parts.length - 1];
-			i.variables.set(shortName, cls);
+			i.variables.set(parts[parts.length - 1], cls);
 			return cls;
 		});
 
-		i.variables.set('isOfType',      function(obj:Dynamic, className:String):Bool
+		i.variables.set('isOfType', function(obj:Dynamic, className:String):Bool
 		{
 			var cls:Dynamic = Type.resolveClass(className);
-			if (cls == null) return false;
-			return Std.isOfType(obj, cls);
+			return cls != null && Std.isOfType(obj, cls);
 		});
 
-		i.variables.set('scriptStop',    function():String { return FUNCTION_STOP; });
+		i.variables.set('scriptStop',     function():String { return FUNCTION_STOP; });
 		i.variables.set('scriptContinue', function():String { return FUNCTION_CONTINUE; });
 
-		i.variables.set('log',           function(msg:Dynamic, ?level:String = 'info'):Void
+		i.variables.set('log', function(msg:Dynamic, ?level:String = 'info'):Void
 		{
 			switch (level.toLowerCase())
 			{
@@ -461,27 +389,21 @@ class HScript
 			}
 		});
 
-		i.variables.set('getLogs',       function():Array<ScriptLog> { return logs.copy(); });
-		i.variables.set('clearLogs',     function():Void { clearLogs(); });
+		i.variables.set('getLogs',   function():Array<ScriptLog> { return logs.copy(); });
+		i.variables.set('clearLogs', function():Void             { clearLogs(); });
 
 		#if sys
-		i.variables.set('fileExists',    function(path:String):Bool
-		{
-			return sys.FileSystem.exists(path);
-		});
-
+		i.variables.set('fileExists',    function(path:String):Bool         { return sys.FileSystem.exists(path); });
 		i.variables.set('readFile',      function(path:String):Null<String>
 		{
 			try { return sys.io.File.getContent(path); }
 			catch (e:Dynamic) { _logError('readFile: $e'); return null; }
 		});
-
 		i.variables.set('writeFile',     function(path:String, content:String):Bool
 		{
 			try { sys.io.File.saveContent(path, content); return true; }
 			catch (e:Dynamic) { _logError('writeFile: $e'); return false; }
 		});
-
 		i.variables.set('listDirectory', function(path:String):Array<String>
 		{
 			try { return sys.FileSystem.readDirectory(path); }
@@ -489,7 +411,7 @@ class HScript
 		});
 		#end
 
-		i.variables.set('httpGet',       function(url:String, cb:String->Void, ?errCb:String->Void):Void
+		i.variables.set('httpGet', function(url:String, cb:String->Void, ?errCb:String->Void):Void
 		{
 			var http = new haxe.Http(url);
 			http.onData  = cb;
@@ -510,46 +432,46 @@ class HScript
 			catch (e:Dynamic) { _logError('stringifyJson: $e'); return '{}'; }
 		});
 
-		i.variables.set('screenWidth',   FlxG.width);
-		i.variables.set('screenHeight',  FlxG.height);
+		i.variables.set('screenWidth',  FlxG.width);
+		i.variables.set('screenHeight', FlxG.height);
 	}
 
 	private function _resolveEase(name:String):Float->Float
 	{
 		return switch (name.toLowerCase())
 		{
-			case 'linein'      | 'linear':    FlxEase.linear;
-			case 'quadin':                    FlxEase.quadIn;
-			case 'quadout':                   FlxEase.quadOut;
-			case 'quadinout':                 FlxEase.quadInOut;
-			case 'cubicin':                   FlxEase.cubeIn;
-			case 'cubicout':                  FlxEase.cubeOut;
-			case 'cubicinout':                FlxEase.cubeInOut;
-			case 'quartin':                   FlxEase.quartIn;
-			case 'quartout':                  FlxEase.quartOut;
-			case 'quartinout':                FlxEase.quartInOut;
-			case 'quintin':                   FlxEase.quintIn;
-			case 'quintout':                  FlxEase.quintOut;
-			case 'quintinout':                FlxEase.quintInOut;
-			case 'sinein':                    FlxEase.sineIn;
-			case 'sineout':                   FlxEase.sineOut;
-			case 'sineinout':                 FlxEase.sineInOut;
-			case 'expoin':                    FlxEase.expoIn;
-			case 'expoout':                   FlxEase.expoOut;
-			case 'expoinout':                 FlxEase.expoInOut;
-			case 'circin':                    FlxEase.circIn;
-			case 'circout':                   FlxEase.circOut;
-			case 'circinout':                 FlxEase.circInOut;
-			case 'elasticin':                 FlxEase.elasticIn;
-			case 'elasticout':                FlxEase.elasticOut;
-			case 'elasticinout':              FlxEase.elasticInOut;
-			case 'backin':                    FlxEase.backIn;
-			case 'backout':                   FlxEase.backOut;
-			case 'backinout':                 FlxEase.backInOut;
-			case 'bouncein':                  FlxEase.bounceIn;
-			case 'bounceout':                 FlxEase.bounceOut;
-			case 'bounceinout':               FlxEase.bounceInOut;
-			default:                          FlxEase.linear;
+			case 'linear':      FlxEase.linear;
+			case 'quadin':      FlxEase.quadIn;
+			case 'quadout':     FlxEase.quadOut;
+			case 'quadinout':   FlxEase.quadInOut;
+			case 'cubicin':     FlxEase.cubeIn;
+			case 'cubicout':    FlxEase.cubeOut;
+			case 'cubicinout':  FlxEase.cubeInOut;
+			case 'quartin':     FlxEase.quartIn;
+			case 'quartout':    FlxEase.quartOut;
+			case 'quartinout':  FlxEase.quartInOut;
+			case 'quintin':     FlxEase.quintIn;
+			case 'quintout':    FlxEase.quintOut;
+			case 'quintinout':  FlxEase.quintInOut;
+			case 'sinein':      FlxEase.sineIn;
+			case 'sineout':     FlxEase.sineOut;
+			case 'sineinout':   FlxEase.sineInOut;
+			case 'expoin':      FlxEase.expoIn;
+			case 'expoout':     FlxEase.expoOut;
+			case 'expoinout':   FlxEase.expoInOut;
+			case 'circin':      FlxEase.circIn;
+			case 'circout':     FlxEase.circOut;
+			case 'circinout':   FlxEase.circInOut;
+			case 'elasticin':   FlxEase.elasticIn;
+			case 'elasticout':  FlxEase.elasticOut;
+			case 'elasticinout': FlxEase.elasticInOut;
+			case 'backin':      FlxEase.backIn;
+			case 'backout':     FlxEase.backOut;
+			case 'backinout':   FlxEase.backInOut;
+			case 'bouncein':    FlxEase.bounceIn;
+			case 'bounceout':   FlxEase.bounceOut;
+			case 'bounceinout': FlxEase.bounceInOut;
+			default:            FlxEase.linear;
 		};
 	}
 
@@ -572,11 +494,7 @@ class HScriptManager
 
 	public static function load(key:String, path:String):HScript
 	{
-		if (_scripts.exists(key))
-		{
-			_scripts.get(key).stop();
-			_scripts.remove(key);
-		}
+		if (_scripts.exists(key)) { _scripts.get(key).stop(); _scripts.remove(key); }
 		var hs = new HScript(path);
 		_scripts.set(key, hs);
 		return hs;
@@ -584,31 +502,19 @@ class HScriptManager
 
 	public static function loadInline(key:String, code:String):HScript
 	{
-		if (_scripts.exists(key))
-		{
-			_scripts.get(key).stop();
-			_scripts.remove(key);
-		}
+		if (_scripts.exists(key)) { _scripts.get(key).stop(); _scripts.remove(key); }
 		var hs = HScript.fromString(code, key);
 		_scripts.set(key, hs);
 		return hs;
 	}
 
-	public static function get(key:String):Null<HScript>
-	{
-		return _scripts.get(key);
-	}
-
-	public static function exists(key:String):Bool
-	{
-		return _scripts.exists(key);
-	}
+	public static function get(key:String):Null<HScript>     { return _scripts.get(key); }
+	public static function exists(key:String):Bool           { return _scripts.exists(key); }
+	public static function getKeys():Array<String>           { return [for (k in _scripts.keys()) k]; }
 
 	public static function callAll(func:String, ?args:Array<Dynamic>):Void
 	{
-		for (hs in _scripts)
-			if (hs.active && !hs.isDead)
-				hs.call(func, args);
+		for (hs in _scripts) if (hs.active && !hs.isDead) hs.call(func, args);
 	}
 
 	public static function setAll(name:String, value:Dynamic):Void
@@ -622,33 +528,15 @@ class HScriptManager
 		if (hs != null) { hs.stop(); _scripts.remove(key); }
 	}
 
-	public static function stopAll():Void
-	{
-		for (hs in _scripts) hs.stop();
-		_scripts.clear();
-	}
-
-	public static function reload(key:String):Void
-	{
-		var hs = _scripts.get(key);
-		if (hs != null) hs.reload();
-	}
-
-	public static function reloadAll():Void
-	{
-		for (hs in _scripts) hs.reload();
-	}
+	public static function stopAll():Void  { for (hs in _scripts) hs.stop(); _scripts.clear(); }
+	public static function reload(key:String):Void { var hs = _scripts.get(key); if (hs != null) hs.reload(); }
+	public static function reloadAll():Void { for (hs in _scripts) hs.reload(); }
 
 	public static function getActiveCount():Int
 	{
 		var count:Int = 0;
 		for (hs in _scripts) if (hs.active && !hs.isDead) count++;
 		return count;
-	}
-
-	public static function getKeys():Array<String>
-	{
-		return [for (k in _scripts.keys()) k];
 	}
 }
 #end
